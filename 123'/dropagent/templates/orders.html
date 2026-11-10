@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Ordrar{% endblock %}
+{% block content %}
+<div class="spread">
+  <div>
+    <h1>Ordrar</h1>
+    <p class="muted">De senaste 50 ordrarna från Shopify. Beställning hos AliExpress: <strong>{{ mode_labels.get(ae_mode, ae_mode) }}</strong>
+      · <a href="{{ url_for('settings_page') }}#Ordrar hos AliExpress">ändra</a></p>
+  </div>
+  <div class="row">
+  {% if ae_ready and ae_mode != 'av' %}
+  <form method="post" action="{{ url_for('orders_sync') }}"><button class="btn">↻ Hämta nya ordrar</button></form>
+  {% endif %}
+  <form method="get" class="row">
+    <input type="text" name="q" value="{{ q }}" placeholder="Sök: #1001, e-post, namn" style="width:240px">
+    <button class="btn">Sök</button>
+  </form>
+  </div>
+</div>
+
+{% if not cfg.shopify %}
+  <div class="card empty">Shopify är inte kopplat. <a href="{{ url_for('settings_page') }}#Shopify">Koppla Shopify →</a></div>
+{% elif error %}
+  <div class="flash error">{{ error }}</div>
+{% else %}
+  {% set todo = orders|selectattr('needs_action')|list %}
+  {% set late = orders|selectattr('late')|list %}
+  <div class="grid g4" style="margin-bottom:16px">
+    <div class="stat"><div class="num">{{ orders|length }}</div><div class="lbl">Ordrar visade</div></div>
+    <div class="stat"><div class="num">{{ todo|length }}</div><div class="lbl">Betalda, ej skickade</div></div>
+    <div class="stat"><div class="num">{{ late|length }}</div><div class="lbl">Ej skickade efter {{ late_days }} dagar</div></div>
+    <div class="stat"><div class="num">{{ sek(orders|sum(attribute='total')) }}</div><div class="lbl">Summa (visade ordrar)</div></div>
+  </div>
+  {% if ae_mode != 'av' %}
+  <div class="note warn" style="margin-bottom:16px">
+    DropAgent beställer hos AliExpress åt dig. <strong>Beställ inte samma order i DSers också</strong>, då blir det dubbelt.
+    Ordrar som DropAgent inte kan ta (markerade <em>Spärrad</em>) beställer du i DSers och klickar <em>Sköter själv</em>.
+  </div>
+  {% elif todo %}
+  <div class="note info" style="margin-bottom:16px">
+    <strong>{{ todo|length }} order(s) väntar på att skickas.</strong> Öppna DSers → <em>Orders</em> → <em>Awaiting order</em> och klicka <em>Order</em> för att beställa från AliExpress. Spårningsnummer synkas sedan automatiskt tillbaka hit.
+  </div>
+  {% endif %}
+  <div class="card">
+  {% if orders %}
+  <div class="table-wrap"><table>
+    <tr><th>Order</th><th>Kund</th><th>Varor</th><th>Summa</th><th>Betalning</th><th>Leverans</th><th>Spårning</th>{% if ae_mode != 'av' %}<th>AliExpress</th>{% endif %}</tr>
+    {% for o in orders %}
+    <tr>
+      <td><a href="{{ o.admin_url }}" target="_blank" rel="noopener"><strong>{{ o.name }}</strong></a><br><span class="muted small">{{ o.created_at }}</span></td>
+      <td>{{ o.customer or '–' }}<br><span class="muted small">{{ o.email }}{% if o.city %} · {{ o.city }}{% endif %}</span></td>
+      <td class="small">{% for i in o['items'] %}{{ i.qty }} × {{ i.title }}{% if i.variant and i.variant != 'Default Title' %} ({{ i.variant }}){% endif %}<br>{% endfor %}</td>
+      <td>{{ sek(o.total) }}{% if o.refunded %}<br><span class="pill warn">−{{ sek(o.refunded) }}</span>{% endif %}</td>
+      <td>{% if o.cancelled %}<span class="pill err">Avbruten</span>{% else %}
+        <span class="pill {{ 'ok' if o.financial == 'PAID' else ('warn' if 'REFUND' in o.financial else '') }}">{{ {'PAID':'Betald','PENDING':'Väntar','REFUNDED':'Återbetald','PARTIALLY_REFUNDED':'Delvis återbet.','AUTHORIZED':'Auktoriserad','VOIDED':'Annullerad'}.get(o.financial, o.financial) }}</span>{% endif %}</td>
+      <td><span class="pill {{ 'ok' if o.fulfillment == 'FULFILLED' else ('err' if o.late else 'warn') }}">{{ {'FULFILLED':'Skickad','UNFULFILLED':'Ej skickad','PARTIALLY_FULFILLED':'Delvis skickad','IN_PROGRESS':'Pågår','ON_HOLD':'Pausad','SCHEDULED':'Schemalagd'}.get(o.fulfillment, o.fulfillment) }}</span>
+        {% if o.late %}<br><span class="small" style="color:var(--err)">Försenad!</span>{% endif %}</td>
+      <td class="small">{% for t in o.tracking %}{% if t.url %}<a href="{{ t.url }}" target="_blank" rel="noopener">{{ t.number }}</a>{% else %}{{ t.number }}{% endif %} <span class="muted">{{ t.company }}</span><br>{% else %}–{% endfor %}</td>
+      {% if ae_mode != 'av' %}{% set a = ae.get(o.id) %}
+      <td class="small">
+        {% if not a %}{% if o.needs_action %}<span class="muted">Hämtas vid nästa synk</span>{% else %}–{% endif %}
+        {% else %}
+          <span class="pill {{ {'beställd':'ok','skickad':'ok','spärrad':'err','fel':'err','väntar':'warn','beställer':'warn'}.get(a.status, '') }}">{{ {'väntar':'Väntar på dig','spärrad':'Spärrad','beställd':'Beställd','skickad':'Skickad','fel':'Fel','manuell':'Sköts i DSers','beställer':'Beställer…'}.get(a.status, a.status) }}</span>
+          {% if a.cost_estimate %}<br>Inköp ca {{ sek(a.cost_estimate) }}{% endif %}
+          {% if a.ae_order_ids %}<br>AE-order: {{ a.ae_order_ids }}{% endif %}
+          {% if a.ae_status %}<br><span class="muted">{{ a.ae_status }}</span>{% endif %}
+          {% if a.reason %}<br><span class="muted">{{ a.reason }}</span>{% endif %}
+          {% for i in a['items'] %}{% if i.sku_label %}<br><span class="muted">{{ i.count }} × {{ i.sku_label }}</span>{% endif %}{% endfor %}
+          {% if a.status in ('väntar', 'spärrad', 'fel') %}
+          <div class="row" style="margin-top:6px">
+            <form method="post" action="{{ url_for('orders_action', oid=a.id, action='bestall') }}"><button class="btn primary small" data-busy="Beställer…" data-confirm="Beställ {{ o.name }} hos AliExpress nu? Inköpet blir ca {{ sek(a.cost_estimate) }}.">Beställ</button></form>
+            <form method="post" action="{{ url_for('orders_action', oid=a.id, action='manuell') }}"><button class="btn small">Sköter själv</button></form>
+          </div>
+          {% endif %}
+        {% endif %}
+      </td>{% endif %}
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<p class="empty">Inga ordrar än. Den första kommer! 🤞</p>{% endif %}
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Trender{% endblock %}
+{% block content %}
+<h1>Trendagenten</h1>
+<p class="muted">Agenten söker på webben efter vad som är populärt just nu (TikTok, Amazon, AliExpress, nyheter) och bedömer om det passar en liten svensk butik.</p>
+
+{% if running %}
+<div class="flash info">En analys pågår redan. <a href="{{ url_for('job_page', job_id=running.id, back=url_for('trends_page')) }}">Visa status →</a></div>
+{% endif %}
+
+<div class="grid g2">
+  <form class="card" method="post" action="{{ url_for('trends_run') }}">
+    <h2>🔎 Hitta trendande produkter</h2>
+    <label for="focus">Fokus (valfritt)</label>
+    <input type="text" id="focus" name="focus" placeholder="T.ex. hem och kök, husdjur, under 300 kr, julklappar">
+    <div class="help">Lämna tomt för att söka brett.</div>
+    <label for="count">Antal produkter i rapporten</label>
+    <select id="count" name="count">
+      <option>5</option><option selected>10</option><option>15</option>
+    </select>
+    <p style="margin-top:16px"><button class="btn primary" data-busy="Startar…">Kör trendanalys</button></p>
+    <p class="muted small">Tar 1–4 minuter. Kostar ungefär 2–6 kr med Opus (mindre med Sonnet eller Haiku).</p>
+  </form>
+
+  <form class="card" method="post" action="{{ url_for('trends_links') }}">
+    <h2>🔗 Analysera länkar du har sett</h2>
+    <label for="links">Klistra in TikTok-, AliExpress- eller annonslänkar (en per rad), eller beskriv produkten</label>
+    <textarea id="links" name="links" placeholder="https://www.tiktok.com/@.../video/...&#10;https://www.aliexpress.com/item/...&#10;Den där magnetiska kabelhållaren som alla visar"></textarea>
+    <p style="margin-top:16px"><button class="btn primary" data-busy="Startar…">Analysera</button></p>
+    <p class="muted small">TikTok-länkar går ofta inte att öppna för agenten, så skriv gärna några ord om vad du såg.</p>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Tidigare rapporter</h2>
+  {% if reports %}
+  <div class="table-wrap"><table>
+    <tr><th>Datum</th><th>Typ</th><th>Fokus / länkar</th><th>Produkter</th><th></th></tr>
+    {% for r in reports %}
+    <tr>
+      <td>{{ r.created_at[:16] }}</td>
+      <td>{{ 'Trendanalys' if r.kind == 'trend' else 'Länkanalys' }}</td>
+      <td class="small">{{ (r.focus or '–')[:80] }}</td>
+      <td>{{ r.count }}</td>
+      <td><a class="btn small" href="{{ url_for('report_page', report_id=r.id) }}">Öppna</a></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<p class="empty">Inga rapporter än.</p>{% endif %}
+</div>
+{% endblock %}

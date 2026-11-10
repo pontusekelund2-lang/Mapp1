@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DropAgent – Kom igång</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2330; --muted:#667085; --line:#e4e7ec; --accent:#4f46e5; --soft:#eef0ff; --warn:#fff4e5; --warnt:#8a3b00; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12141a; --card:#1b1e27; --text:#e6e8ee; --muted:#9aa1b2; --line:#2b303c; --accent:#8b85ff; --soft:#262646; --warn:#36281a; --warnt:#f5c08b; } }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:820px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-size:30px; margin:0 0 4px; } h2 { margin:36px 0 10px; font-size:22px; border-top:1px solid var(--line); padding-top:24px; }
+  h3 { margin:20px 0 6px; font-size:17px; }
+  a { color:var(--accent); } code, kbd { background:var(--soft); padding:1px 6px; border-radius:5px; font-size:14px; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:14px 0; }
+  .tip { background:var(--soft); border-radius:12px; padding:12px 16px; margin:14px 0; }
+  .warn { background:var(--warn); color:var(--warnt); border-radius:12px; padding:12px 16px; margin:14px 0; }
+  li { margin-bottom:6px; } .muted { color:var(--muted); }
+  table { border-collapse:collapse; width:100%; } td, th { border-bottom:1px solid var(--line); padding:8px; text-align:left; vertical-align:top; }
+  nav.toc a { display:block; }
+</style>
+</head>
+<body><main>
+<h1>◆ DropAgent: kom igång</h1>
+<p class="muted">Din AI-assistent för dropshipping: trendanalys, produktsidor, orderöversikt och kundtjänst. Programmet körs på din egen dator.</p>
+
+<div class="box">
+<strong>Innehåll</strong>
+<nav class="toc">
+  <a href="#start">1. Starta programmet (Windows)</a>
+  <a href="#claude">2. Skaffa en Anthropic API-nyckel (krävs)</a>
+  <a href="#shopify">3. Koppla Shopify</a>
+  <a href="#dsers">4. Installera DSers (skickar ordrar till AliExpress)</a>
+  <a href="#gmail">5. Koppla Gmail (kundtjänst)</a>
+  <a href="#autopilot">5b. Autopiloten och AliExpress API</a>
+  <a href="#daily">6. Så använder du DropAgent</a>
+  <a href="#cost">7. Vad kostar det?</a>
+  <a href="#law">8. Regler du måste känna till</a>
+  <a href="#help">9. Felsökning</a>
+</nav>
+</div>
+
+<h2 id="start">1. Starta programmet (Windows)</h2>
+<ol>
+  <li><strong>Packa upp</strong> zip-filen: högerklicka på <code>dropagent.zip</code> → <em>Extrahera alla…</em>. Lägg mappen t.ex. i <em>Dokument</em>.</li>
+  <li><strong>Dubbelklicka på <code>start.bat</code></strong> i mappen.
+    <ul>
+      <li>Om Windows visar "Windows skyddade datorn": klicka <em>Mer information</em> → <em>Kör ändå</em>.</li>
+      <li>Första gången installeras <strong>allt automatiskt</strong>: Python (om det saknas) och det DropAgent behöver. Det tar några minuter. Om Windows frågar om du vill tillåta ändringar, svara <em>Ja</em>.</li>
+      <li>En genväg som heter <strong>DropAgent</strong> läggs på skrivbordet. Nästa gång startar du programmet med den.</li>
+      <li>Sedan öppnas DropAgent i webbläsaren på <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>.</li>
+    </ul></li>
+  <li><strong>Låt det svarta fönstret vara öppet</strong> så länge du använder programmet. Stäng det för att avsluta.</li>
+</ol>
+<p class="muted">Om den automatiska Python-installationen inte fungerar öppnas python.org. Klicka då på <em>Download Python</em>, kryssa i <strong>"Add python.exe to PATH"</strong>, installera och dubbelklicka på <code>start.bat</code> igen.</p>
+
+<h2 id="claude">2. Skaffa en Anthropic API-nyckel (krävs)</h2>
+<p>Nyckeln låter DropAgent använda Claude, AI:n som gör analyserna. Du betalar bara för det du använder.</p>
+<ol>
+  <li>Gå till <a href="https://console.anthropic.com">console.anthropic.com</a> och skapa ett konto.</li>
+  <li>Gå till <em>Billing</em> och fyll på med krediter (t.ex. 5–10 USD räcker länge för att testa). Ett vanligt Claude.ai-abonnemang (Pro/Max) gäller <em>inte</em> här, eftersom API:t betalas separat.</li>
+  <li>Gå till <em>API Keys</em> → <em>Create Key</em>, ge den namnet "DropAgent" och kopiera nyckeln (den börjar med <code>sk-ant-</code>).</li>
+  <li>Klistra in nyckeln i DropAgent under <strong>Inställningar → Claude</strong>, klicka <em>Spara</em> och sedan <em>Testa</em>.</li>
+</ol>
+<div class="tip">Nu kan du redan köra trendagenten. Resten kan du koppla senare.</div>
+
+<h2 id="shopify">3. Koppla Shopify</h2>
+<ol>
+  <li>Skapa en butik på <a href="https://www.shopify.com/se">shopify.com/se</a> om du inte har en (det finns en gratis provperiod).</li>
+  <li>Skapa en app som DropAgent kan använda. Shopify ändrar menyerna ibland, så namnen kan skilja sig lite:
+    <ul>
+      <li>I Shopify-admin: <em>Inställningar</em> → <em>Appar</em> → <em>Utveckla appar</em>. I nya butiker skickas du vidare till <strong>Dev Dashboard</strong>.</li>
+      <li>Skapa en ny app och kalla den "DropAgent".</li>
+      <li>Under <em>Access / Scopes</em> för Admin API, välj:
+        <code>read_products</code>, <code>write_products</code>, <code>read_orders</code>, <code>write_orders</code>, <code>read_customers</code>.</li>
+      <li>Spara/släpp versionen och <strong>installera appen i din butik</strong>.</li>
+    </ul></li>
+  <li>Kopiera inloggningsuppgifterna till DropAgent under <strong>Inställningar → Shopify</strong>:
+    <ul>
+      <li><strong>Nya appar (Dev Dashboard):</strong> klistra in <em>Client ID</em> och <em>Client Secret</em> och lämna token-fältet tomt.</li>
+      <li><strong>Äldre "custom app" i admin:</strong> klistra in <em>Admin API access token</em> (börjar med <code>shpat_</code>).</li>
+      <li>Shopify-domän: t.ex. <code>minbutik.myshopify.com</code>.</li>
+    </ul></li>
+  <li>Klicka <em>Spara</em> och sedan <em>Testa</em>.</li>
+</ol>
+<div class="tip">Kundens namn och e-post räknas som skyddad kunddata hos Shopify. Om ordrar visas utan namn eller e-post: i appens inställningar, under <em>Protected customer data</em>, begär åtkomst till namn och e-post (för eget bruk godkänns det direkt).</div>
+
+<h2 id="dsers">4. Installera DSers (skickar ordrar till AliExpress)</h2>
+<p>DSers är AliExpress officiella partner för dropshipping. När en kund beställer i din butik lägger DSers ordern hos AliExpress och för tillbaka spårningsnumret till Shopify. Grundversionen är gratis.</p>
+<ol>
+  <li>Installera <strong>DSers – AliExpress Dropshipping</strong> från Shopify App Store och logga in med ditt AliExpress-konto.</li>
+  <li>När DropAgent har lagt upp en produkt: öppna DSers → <em>Products</em> → hitta produkten → <em>Mapping</em>. Klistra in AliExpress-länken från produktsidan i DropAgent. Då vet DSers vilken leverantör ordern ska till.</li>
+  <li>När du får en order: DSers → <em>Orders</em> → <em>Awaiting order</em> → <em>Order</em>. DSers kan också ställas in att beställa automatiskt.</li>
+  <li>Slå på <em>Sync tracking number to Shopify</em> i DSers-inställningarna så att kunden får spårningsmejl automatiskt.</li>
+</ol>
+<div class="warn"><strong>Varför inte Temu?</strong> Temu erbjuder inget sätt för återförsäljare att koppla in sig, och deras villkor förbjuder köp för vidareförsäljning. Konton som gör det riskerar att stängas, så DropAgent använder AliExpress.</div>
+
+<h2 id="gmail">5. Koppla Gmail (kundtjänst)</h2>
+<div class="tip"><strong>Inget nytt Gmail-konto behövs.</strong> Använd ditt befintliga Gmail och en <em>plus-adress</em>, t.ex. <code>dittnamn+support@gmail.com</code>. Mejl dit hamnar i din vanliga inkorg, men DropAgent läser och svarar <strong>bara</strong> på dem. Skriv plus-adressen i fältet <em>Support-adress</em> och använd den som kontaktadress i Shopify (Inställningar → Allmänt → Kundkontakt, samt i policyerna).</div>
+<ol>
+  <li>Skapa gärna en separat Gmail-adress för butiken, t.ex. <code>minbutik.kundtjanst@gmail.com</code>, och skriv den som kontaktadress i Shopify.</li>
+  <li>Slå på <strong>tvåstegsverifiering</strong> på kontot: <a href="https://myaccount.google.com/security">myaccount.google.com/security</a>.</li>
+  <li>Skapa ett <strong>app-lösenord</strong>: <a href="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a>. Namnge det "DropAgent" och kopiera de 16 tecknen.</li>
+  <li>Klistra in adressen och app-lösenordet i DropAgent under <strong>Inställningar → Gmail</strong>, spara och klicka <em>Testa</em>.</li>
+  <li>Valfritt: ställ in att mejl ska kollas automatiskt, t.ex. var 15:e minut. Agenten <em>analyserar</em> då nya mejl, men skickar ingenting förrän du godkänner.</li>
+</ol>
+<h3>Svara automatiskt</h3>
+<p>Under <strong>Inställningar → Gmail → Svara kunder automatiskt</strong>:</p>
+<ul>
+  <li><strong>Svara automatiskt på enkla frågor:</strong> leveransfrågor, produktfrågor och returinstruktioner skickas direkt. Spam avfärdas.</li>
+  <li><strong>+ återbetala små belopp:</strong> reklamationer upp till din gräns (standard 150 kr) återbetalas och besvaras automatiskt.</li>
+  <li>Arga kunder, osäkra fall, avbeställningar och större belopp hamnar alltid hos dig under <em>Kundtjänst</em>, med förklaring.</li>
+  <li>Sätt <em>Kolla mejl automatiskt</em> till t.ex. <code>15</code> minuter.</li>
+</ul>
+<p class="muted">DropAgent läser bara <em>olästa</em> mejl i inkorgen och markerar dem som lästa när ett ärende har skapats. Notiser från Shopify och no-reply-adresser hoppas över.</p>
+
+<h2 id="autopilot">5b. Autopiloten och AliExpress API</h2>
+<p>Autopiloten hittar produkter som andra redan marknadsför, hittar samma produkt billigast på AliExpress och sätter ett pris under svenska konkurrenter, men aldrig under din lägsta vinst. Du godkänner under <strong>Autopilot</strong>, och då publiceras produkten direkt i butiken.</p>
+<ol>
+  <li><strong>När AliExpress har godkänt din app:</strong> gå till AliExpress Open Platform → <em>App Management</em> och kopiera <strong>App Key</strong> och <strong>App Secret</strong>.</li>
+  <li>Lägg in dem i DropAgent under <strong>Inställningar → AliExpress</strong> och klicka <em>Spara</em>.</li>
+  <li>I din app på AliExpress Open Platform, ange <strong>Callback URL</strong> till <code>http://127.0.0.1:8765/aliexpress/callback</code> (samma som står i DropAgent).</li>
+  <li>Klicka <strong>Koppla AliExpress-konto</strong> och godkänn. Om sidan inte laddas efteråt: kopiera hela adressen från adressfältet och klistra in den under <em>"Fungerade inte kopplingen?"</em>.</li>
+  <li>Klicka <strong>Testa</strong> vid AliExpress.</li>
+  <li><strong>Shopify-behörigheter:</strong> i Shopify Dev Dashboard → DropAgent-appen → ny version: lägg till <code>read_publications</code> och <code>write_publications</code>, släpp versionen och godkänn den i butiken. Då kan autopiloten publicera i Webbshop själv.</li>
+  <li>Under <strong>Inställningar → Autopilot</strong>: slå på daglig körning, välj klockslag, max antal förslag per dag och AI-budget.</li>
+</ol>
+<h3>Portföljen: 3 produkter i taget</h3>
+<ul>
+  <li>Autopiloten håller ett fast antal produkter i butiken (standard 3). När alla platser är fyllda står den på <strong>standby</strong> och kostar inget.</li>
+  <li>Varje dag kollar den försäljningen i Shopify. En ny produkt får 14 dagar på sig. Säljer den sedan under 3 st/vecka, under 50 % av sin bästa vecka, eller inget på 14 dagar, föreslås ett <strong>byte</strong>.</li>
+  <li>Du klickar <em>Byt ut</em> (produkten sparas som utkast i Shopify) eller <em>Behåll en vecka till</em>. Efter ett byte letar autopiloten fram en ersättare.</li>
+  <li>Kom ihåg att även ta bort eller pausa produkten i DSers när den byts ut.</li>
+  <li>Siffrorna ändrar du under <strong>Inställningar → Autopilot</strong>.</li>
+</ul>
+<div class="tip">Utan AliExpress API fungerar autopiloten ändå till hälften: den hittar idéer, konkurrenter och priser, och du väljer leverantör med skärmbilder via <em>Öppna som produkt</em>.</div>
+<div class="tip">Efter att du godkänt en produkt: koppla den i DSers (<em>Products → Mapping</em>) med länken som visas i historiken. DSers har inget API, så det steget görs för hand (ca 1 minut).</div>
+
+<h2 id="synlighet">5c. Synlighet utan annonser</h2>
+<p>Fliken <strong>Synlighet</strong> har fyra agenter som gör produkterna synliga gratis:</p>
+<ul>
+  <li><strong>Kanaler:</strong> visar vilka gratis Shopify-kanaler du har (Google & YouTube, Facebook & Instagram, TikTok) med länk för att installera. <em>Publicera i alla kanaler</em> lägger ut produkten överallt på en gång.</li>
+  <li><strong>Google och AI-sök:</strong> tar reda på vad svenskar söker på och föreslår ny titel, Google-texter, kategori och vanliga frågor. Du godkänner, och sedan uppdateras Shopify.</li>
+  <li><strong>Videoagent:</strong> gör 15 sekunders säljvideor av produktbilderna och publicerar dem på Instagram Reels och Facebook (se 5d).</li>
+  <li><strong>Lönar sig annonser?</strong> räknar på din vinst och säger ärligt om annonser är för dyra.</li>
+</ul>
+
+<h2 id="video">5d. Videoagenten: koppla Instagram och Facebook (en gång, ca 20 min)</h2>
+<ol>
+  <li><strong>Instagram:</strong> gör ditt butikskonto till ett <em>professionellt konto</em> (Creator eller Business). I Instagram-appen: Inställningar → Kontotyp och verktyg → Byt till professionellt konto.</li>
+  <li><strong>Facebook-sida:</strong> skapa en sida för butiken på <a href="https://www.facebook.com/pages/create">facebook.com/pages/create</a> och koppla Instagram-kontot till den (sidans inställningar → Länkade konton → Instagram).</li>
+  <li><strong>Meta-app:</strong> gå till <a href="https://developers.facebook.com/apps">developers.facebook.com/apps</a> → <em>Skapa app</em>. Välj ett användningsområde för att hantera sidor/Instagram (t.ex. "Övrigt" → "Företag"). Appen kan stå kvar i utvecklingsläge eftersom du själv är admin.</li>
+  <li>Kopiera <strong>App ID</strong> och <strong>App Secret</strong> (appens Inställningar → Grundläggande) till DropAgent under <strong>Inställningar → Sociala medier</strong> och spara.</li>
+  <li>Öppna <a href="https://developers.facebook.com/tools/explorer">Graph API Explorer</a>, välj din app och <em>Användartoken</em>. Lägg till behörigheterna:
+    <code>pages_show_list</code>, <code>pages_read_engagement</code>, <code>pages_manage_posts</code>, <code>instagram_basic</code>, <code>instagram_content_publish</code>, <code>business_management</code>. Klicka <em>Generate Access Token</em> och godkänn.</li>
+  <li>Kopiera token, klistra in den i DropAgent (Sociala medier) och klicka <strong>Koppla</strong>. DropAgent byter den mot en sidtoken som inte går ut.</li>
+</ol>
+<p>Ställ sedan in <em>Videor per produkt och vecka</em> och om de ska <em>publiceras automatiskt</em>. Videorna görs när autopilotens dagliga körning är på. Du kan också klicka <em>Skapa video nu</em> på Synlighet-sidan.</p>
+<div class="tip">TikTok och YouTube publicerar bara privat via API tills appen har granskats. Därför kan videorna där bara laddas ner och läggas upp för hand.</div>
+<div class="tip">Videorna byggs av produktbilderna. Bilder med andras loggor eller vattenstämplar bör bytas ut mot leverantörens rena bilder eller egna foton.</div>
+
+<h2 id="daily">6. Så använder du DropAgent</h2>
+<div class="box">
+<h3>🔎 Hitta produkter (Trender)</h3>
+<ul>
+  <li><strong>Kör trendanalys</strong>: agenten söker på webben efter vad som trendar (TikTok, Amazon, AliExpress, säsong) och ger dig en topplista med betyg, uppskattad vinst och risker.</li>
+  <li><strong>Analysera länkar</strong>: klistra in TikTok- eller AliExpress-länkar du har sett och få en bedömning.</li>
+  <li>Klicka <em>Sök på AliExpress</em> för att hitta riktiga säljare och priser. Klicka <em>Spara</em> på de produkter du gillar.</li>
+</ul>
+<h3>🤖 Hitta och välja leverantör (Leverantörsagenten på produktsidan)</h3>
+<ul>
+  <li><strong>1. Hitta leverantörer:</strong> agenten söker fram AliExpress-annonser för produkten.</li>
+  <li><strong>2. Ladda upp skärmbilder</strong> av 1–3 annonser (<kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>). Ta med produktsidan, gärna även recensioner och beskrivning.</li>
+  <li><strong>3. Låt agenten välja:</strong> den jämför pris, betyg, sålda, lager, frakt och loggor, väljer bästa leverantör och en reserv, och fyller i kostnaderna. Om rutan är ikryssad skriver den även produkttexten direkt.</li>
+  <li>Provexemplar och betalningar gör du alltid själv.</li>
+</ul>
+<h3>🛍️ Skapa produktsidor (Produkter)</h3>
+<ul>
+  <li>Fyll i den riktiga AliExpress-länken, inköpspris, frakt och bildlänkar.</li>
+  <li>Klicka <em>Låt agenten skriva produkttext och sätta pris</em>. Agenten kollar konkurrenternas priser och skriver en svensk produktsida.</li>
+  <li>Läs igenom, ändra det du vill, och klicka <em>Godkänn och lägg upp i Shopify</em>. Produkten skapas som <strong>utkast</strong>, så du aktiverar den själv i Shopify.</li>
+  <li>Koppla produkten till leverantören i DSers (se steg 4).</li>
+</ul>
+<h3>📦 Följ ordrar (Ordrar)</h3>
+<ul><li>Se betalda ordrar som inte har skickats, spårningsnummer och försenade ordrar (ej skickade efter 21 dagar).</li></ul>
+<h3>💬 Kundtjänst och returer (Kundtjänst)</h3>
+<ul>
+  <li>Klicka <em>Hämta nya mejl</em>. För varje mejl letar agenten upp ordern och föreslår ett svar och en åtgärd (t.ex. svar på leveransfråga, returinstruktioner eller återbetalning) enligt din policy.</li>
+  <li>Redigera svaret om du vill och klicka <em>Godkänn och skicka</em>. Om återbetalning är ikryssad görs den i Shopify till kundens kort eller Klarna.</li>
+  <li>Agenten avbeställer inte hos AliExpress. Den säger till när du behöver göra det i DSers.</li>
+  <li>Skriv din egen retur- och reklamationspolicy under <em>Inställningar → Butik och policy</em>. Agenten följer den.</li>
+</ul>
+</div>
+
+<h2 id="cost">7. Vad kostar det?</h2>
+<table>
+  <tr><th>Sak</th><th>Kostnad (ungefär)</th></tr>
+  <tr><td>DropAgent</td><td>Gratis</td></tr>
+  <tr><td>Claude (Opus 5.5): trendanalys</td><td>2–6 kr per analys</td></tr>
+  <tr><td>Claude: produkttext med prisundersökning</td><td>1–3 kr per produkt</td></tr>
+  <tr><td>Claude: kundmejl</td><td>ca 0,2–0,5 kr per mejl</td></tr>
+  <tr><td>Shopify</td><td>Provperiod, sedan från ca 300 kr/mån plus avgift per köp</td></tr>
+  <tr><td>DSers</td><td>Gratis grundversion</td></tr>
+  <tr><td>Annonser (TikTok/Meta)</td><td>Du bestämmer. Börja smått, t.ex. 50–100 kr/dag i en vecka.</td></tr>
+</table>
+<p class="muted">Välj Sonnet eller Haiku under Inställningar för att sänka AI-kostnaden. Översikten visar en uppskattning av vad du har förbrukat. Den exakta kostnaden ser du på console.anthropic.com.</p>
+
+<h2 id="law">8. Regler du måste känna till</h2>
+<div class="box">
+<ul>
+  <li><strong>Företag:</strong> om du säljer på riktigt med syfte att tjäna pengar räknas det som näringsverksamhet. Registrera enskild firma och anmäl dig för F-skatt och moms på <a href="https://www.verksamt.se">verksamt.se</a>.</li>
+  <li><strong>Moms och tull:</strong> all import till EU är momspliktig, och EU håller på att avskaffa tullfriheten för småpaket. Kontrollera aktuella regler hos <a href="https://www.tullverket.se">Tullverket</a> och räkna med importkostnader i ditt inköpspris.</li>
+  <li><strong>Konsumentregler:</strong> kunderna har 14 dagars ångerrätt och 3 års reklamationsrätt, och du ansvarar för varan, inte AliExpress. Visa företagsnamn, organisationsnummer och kontaktuppgifter i butiken.</li>
+  <li><strong>Produktsäkerhet (GPSR):</strong> du som säljer till konsumenter i EU ansvarar för att produkten är säker och CE-märkt där det krävs. Undvik leksaker för små barn, 230 V-elektronik, kosmetika och liknande. Trendagenten försöker sortera bort dem.</li>
+  <li><strong>Marknadsföring:</strong> inga falska "ord. pris", inga påhittade recensioner, inga överdrivna löften. Det är förbjudet enligt marknadsföringslagen.</li>
+  <li><strong>Leveranstid:</strong> var ärlig om leveranstiden. Långa leveranstider som inte har angetts är den vanligaste orsaken till arga kunder.</li>
+</ul>
+</div>
+
+<h2 id="help">9. Felsökning</h2>
+<table>
+  <tr><th>Problem</th><th>Lösning</th></tr>
+  <tr><td>"Python hittades inte"</td><td>Installera om Python och kryssa i "Add python.exe to PATH". Starta om datorn.</td></tr>
+  <tr><td>Sidan öppnas inte</td><td>Gå själv till <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>. Kontrollera att det svarta fönstret är öppet.</td></tr>
+  <tr><td>"Anthropic-nyckeln fungerar inte"</td><td>Skapa en ny nyckel på console.anthropic.com och kontrollera att du har krediter.</td></tr>
+  <tr><td>Shopify 401/403</td><td>Kontrollera att appen är <em>installerad</em> i butiken och har scopes enligt steg 3. Spara om uppgifterna.</td></tr>
+  <tr><td>Gmail nekar inloggning</td><td>Använd ett app-lösenord, inte ditt vanliga lösenord. Tvåstegsverifiering måste vara på.</td></tr>
+  <tr><td>Bilder syns inte i Shopify</td><td>Bildlänkarna måste gå direkt till en bild (sluta på .jpg/.png/.webp). Högerklicka på bilden och välj "Kopiera bildadress".</td></tr>
+</table>
+
+<div class="warn"><strong>Säkerhet:</strong> dina nycklar och lösenord sparas i mappen <code>data</code> på din dator. Dela inte den mappen med någon. Om du vill flytta programmet till en ny dator räcker det att kopiera hela mappen.</div>
+</main></body></html>

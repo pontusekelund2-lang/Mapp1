@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Autopilot{% endblock %}
+{% block content %}
+<div class="spread">
+  <div>
+    <h1>🤖 Autopilot</h1>
+    <p class="muted">Agenterna hittar produkter som andra redan marknadsför, hittar samma produkt billigast på AliExpress och sätter ett pris under svenska konkurrenter. Du godkänner, och sedan publiceras produkten.</p>
+  </div>
+  <form method="post" action="{{ url_for('autopilot_run') }}"><button class="btn primary" data-busy="Startar…" {% if running %}disabled{% endif %}>▶ Kör autopiloten nu</button></form>
+</div>
+
+<div class="grid g4" style="margin:12px 0 16px">
+  <div class="stat"><div class="num">{{ groups['redo']|length }}</div><div class="lbl">Väntar på ditt godkännande</div></div>
+  <div class="stat"><div class="num">{{ sek(today_cost) }}</div><div class="lbl">AI-kostnad i dag (max {{ sek(budget) }})</div></div>
+  <div class="stat"><div class="num">{% if enabled %}På{% else %}Av{% endif %}</div><div class="lbl">Daglig körning {% if enabled %}kl {{ hour }}{% endif %} · <a href="{{ url_for('settings_page') }}#Autopilot">ändra</a></div></div>
+  <div class="stat"><div class="num" style="font-size:16px">{{ last_run[:16] if last_run else '–' }}</div><div class="lbl">Senaste körning</div></div>
+</div>
+
+{% if running %}<div class="flash info">Autopiloten arbetar just nu. <a href="{{ url_for('job_page', job_id=running.id, back=url_for('autopilot_page')) }}">Visa status →</a></div>{% endif %}
+{% if not cfg.aliexpress %}
+<div class="note" style="margin-bottom:16px">AliExpress API är inte inlagt än, så agenten kan inte välja leverantör automatiskt. Den hittar ändå idéer, konkurrenter och priser. Lägg in App Key och App Secret under <a href="{{ url_for('settings_page') }}#AliExpress">Inställningar → AliExpress</a> när du har fått dem.</div>
+{% elif not cfg.aliexpress_token %}
+<div class="note" style="margin-bottom:16px">AliExpress-nycklarna är inlagda men kontot är inte kopplat. Utan koppling saknas lager och frakt. <a href="{{ url_for('aliexpress_connect') }}">Koppla AliExpress-konto →</a></div>
+{% endif %}
+
+<div class="card">
+  <div class="spread">
+    <div>
+      <h2 style="margin-bottom:2px">Portföljen: {{ pf.products|length }} av {{ pf.max }} produkter aktiva</h2>
+      <p class="muted small">{% if pf.free > 0 %}{{ pf.free }} ledig(a) plats(er). Autopiloten tar fram nya förslag.{% else %}Standby: alla platser är fyllda. Autopiloten letar nytt först när en produkt tappar.{% endif %}</p>
+    </div>
+    <form method="post" action="{{ url_for('portfolio_check') }}"><button class="btn small" data-busy="Hämtar…" {% if not cfg.shopify %}disabled{% endif %}>↻ Kolla försäljning nu</button></form>
+  </div>
+  {% for r in pf.retirements %}
+  <div class="note" style="margin:10px 0">
+    <strong>Föreslaget byte: {{ r.name }}</strong>. {{ r.reason }}
+    <form method="post" action="{{ url_for('portfolio_retire', rid=r.id) }}" class="row" style="margin-top:8px">
+      <button class="btn ok small" name="action" value="approve" data-confirm="Ta bort produkten ur butiken och leta en ersättare?">✓ Byt ut</button>
+      <button class="btn small" name="action" value="keep">Behåll en vecka till</button>
+    </form>
+  </div>
+  {% endfor %}
+  {% if pf.products %}
+  <div class="table-wrap"><table class="small" style="margin-top:8px">
+    <tr><th>Produkt</th><th>Aktiv sedan</th><th>Sålda 7 d</th><th>Veckan innan</th><th>Bästa vecka</th><th>Totalt</th><th>Läge</th><th></th></tr>
+    {% for p in pf.products %}{% set st = p.stats %}
+    <tr>
+      <td><a href="{{ url_for('product_page', pid=p.id) }}">{{ p.listing.titel or p.name }}</a></td>
+      <td>{{ (p.active_since or p.created_at)[:10] }}</td>
+      <td>{{ st.last7 if st else '–' }}</td><td>{{ st.prev7 if st else '–' }}</td><td>{{ st.peak7 if st else '–' }}</td><td>{{ st.total if st else '–' }}</td>
+      <td>{% if st.state %}<span class="pill {{ state_labels[st.state][1] }}" title="{{ st.why }}">{{ state_labels[st.state][0] }}</span>{% else %}<span class="muted">Ej kollad</span>{% endif %}</td>
+      <td><form method="post" action="{{ url_for('portfolio_remove', pid=p.id) }}"><button class="btn small" data-confirm="Räkna inte produkten som aktiv (t.ex. en dubblett)? Inget ändras i Shopify.">Räkna inte</button></form></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<p class="muted small">Inga aktiva produkter ännu.</p>{% endif %}
+</div>
+
+<h2>Redo att godkänna</h2>
+{% for c in groups['redo'] %}
+{% set p = c.product %}{% set s = c.supplier %}{% set pr = c.price %}{% set comp = c.competitors %}
+<div class="card" id="c{{ c.id }}">
+  <div class="spread">
+    <div class="row" style="align-items:flex-start; flex-wrap:nowrap">
+      {% if s.best and s.best.images %}<img src="{{ s.best.images[0] }}" alt="" referrerpolicy="no-referrer" style="width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--line)">{% endif %}
+      <div>
+        <h2 style="margin-bottom:4px">{{ p.listing.titel if p and p.listing else c.name }}</h2>
+        <span class="pill ok">Vinst {{ sek(pr.calc.profit) }} / order</span>
+        <span class="pill">{{ pr.calc.margin|pct }} marginal</span>
+        {% if pr.cheapest %}<span class="pill acc">{{ sek(pr.cheapest - pr.price) }} billigare än billigaste konkurrent</span>{% else %}<span class="pill warn">Inga konkurrentpriser hittades</span>{% endif %}
+      </div>
+    </div>
+    <div style="text-align:right">
+      <div class="muted small">Vårt pris</div>
+      <div style="font-size:28px;font-weight:800">{{ sek(pr.price) }}</div>
+    </div>
+  </div>
+
+  <div class="grid g3" style="margin-top:14px">
+    <div>
+      <h3>Varför den säljer</h3>
+      <p class="small">{{ c.trend.varfor_trendar }}</p>
+      {% if c.trend.kallor %}<details><summary class="small">Källor ({{ c.trend.kallor|length }})</summary><div class="sources">{% for u in c.trend.kallor %}<a href="{{ u }}" target="_blank" rel="noopener">{{ u }}</a>{% endfor %}</div></details>{% endif %}
+      <h3 style="margin-top:10px">Risker</h3>
+      <p class="small">{{ c.trend.risker }}</p>
+    </div>
+    <div>
+      <h3>Konkurrenter</h3>
+      {% if comp.list %}
+      <table class="small">{% for k in comp.list[:6] %}<tr><td><a href="{{ k.url }}" target="_blank" rel="noopener">{{ k.butik }}</a></td><td>{{ sek(k.pris_sek) }}{% if k.frakt_sek %} + {{ sek(k.frakt_sek) }} frakt{% endif %}</td></tr>{% endfor %}</table>
+      {% else %}<p class="small muted">Inga svenska konkurrenter med pris hittades.</p>{% endif %}
+      <p class="small muted" style="margin-top:6px">{{ pr.motivering }}</p>
+    </div>
+    <div>
+      <h3>Leverantör</h3>
+      {% if s.best %}
+      <dl class="kv small">
+        <dt>Annons</dt><dd><a href="{{ s.best.url }}" target="_blank" rel="noopener">{{ s.best.title[:50] }}…</a></dd>
+        <dt>Pris</dt><dd>{{ sek(s.best.price_sek) }}{% if s.best.shipping_sek %} + {{ sek(s.best.shipping_sek) }} frakt{% endif %}</dd>
+        <dt>Betyg</dt><dd>{{ s.best.rating or '–' }} · {{ s.best.sold }} sålda</dd>
+        <dt>Lager</dt><dd>{{ s.best.stock if s.best.stock is not none else 'okänt' }}</dd>
+        <dt>Leverans</dt><dd>{{ (s.best.delivery_days ~ ' dagar') if s.best.delivery_days else 'okänd' }}</dd>
+        <dt>Vår kostnad</dt><dd>{{ sek(pr.cost) }} <span class="muted">(inkl. importbuffert)</span></dd>
+        {% if s.backup %}<dt>Reserv</dt><dd><a href="{{ s.backup.url }}" target="_blank" rel="noopener">{{ s.backup.title[:40] }}…</a></dd>{% endif %}
+      </dl>
+      {% if s.warnings %}<p class="small" style="color:var(--warn)">⚠ {{ s.warnings }}</p>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  {% if p and p.listing %}
+  <details style="margin-top:10px"><summary>Förhandsgranska produktsidan</summary>
+    <div class="preview" style="margin-top:8px">
+      <h2>{{ p.listing.titel }}</h2>
+      <div class="thumbs" style="margin-bottom:8px">{% for u in p.images[:6] %}<img src="{{ u }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endfor %}</div>
+      <div class="desc-safe" data-html="{{ p.listing.beskrivning_html }}"></div>
+    </div>
+    <p class="small"><a href="{{ url_for('product_page', pid=p.id) }}">Ändra text och bilder →</a></p>
+  </details>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('autopilot_decide', cid=c.id) }}" class="row" style="margin-top:14px">
+    <label class="row small" style="margin:0">Pris <input type="number" name="price" value="{{ pr.price|int }}" min="{{ pr.floor }}" step="1" style="width:100px"> kr</label>
+    <button class="btn ok" name="action" value="approve" data-confirm="Publicera produkten i butiken nu?">✓ Godkänn och publicera</button>
+    <button class="btn danger" name="action" value="reject">Avfärda</button>
+    <span class="muted small">Lägsta lönsamma pris: {{ sek(pr.floor) }}</span>
+  </form>
+</div>
+{% else %}
+<div class="card empty">Inga förslag väntar just nu. {% if not running %}Klicka <strong>Kör autopiloten nu</strong> för att hitta nya.{% endif %}</div>
+{% endfor %}
+
+{% if groups['pågår'] %}
+<h2 style="margin-top:20px">Pågår</h2>
+<div class="card">{% for c in groups['pågår'] %}<p>{{ c.name }} <span class="pill">{{ labels[c.status] }}</span> <span class="muted small">{{ c.reason }}</span></p>{% endfor %}</div>
+{% endif %}
+
+{% if groups['övrigt'] %}
+<h2 style="margin-top:20px">Inte aktuella just nu</h2>
+<div class="card">
+  {% for c in groups['övrigt'] %}
+  <div id="c{{ c.id }}" class="spread" style="border-bottom:1px solid var(--line); padding:10px 0">
+    <div style="flex:1; min-width:260px">
+      <strong>{{ c.name }}</strong> <span class="pill {{ 'err' if c.status == 'fel' else 'warn' }}">{{ labels[c.status] }}</span><br>
+      <span class="small muted">{{ c.error or c.reason }}</span>
+      {% if c.supplier.rejected %}<details><summary class="small">Bortsorterade annonser ({{ c.supplier.rejected|length }})</summary>
+        <ul class="small">{% for r in c.supplier.rejected[:8] %}<li><a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.title }}</a> – {{ r.why }}</li>{% endfor %}</ul>
+      </details>{% elif c.status == 'ingen_leverantör' and not c.supplier.candidates %}<br><span class="small muted">Inga annonser matchade sökorden ({{ c.supplier.keywords|join(', ') if c.supplier.keywords else 'okänt' }}).</span>{% endif %}
+      {% if c.competitors.cheapest_total %}<br><span class="small">Billigaste konkurrent: {{ sek(c.competitors.cheapest_total) }}</span>{% endif %}
+    </div>
+    <div class="row">
+      {% if c.status in ('behöver_leverantör', 'ingen_leverantör') %}
+      <form method="post" action="{{ url_for('autopilot_decide', cid=c.id) }}"><button class="btn small" name="action" value="manual">Öppna som produkt</button></form>
+      {% endif %}
+      <form method="post" action="{{ url_for('autopilot_retry', cid=c.id) }}"><button class="btn small" data-busy="Startar…">↻ Försök igen</button></form>
+      <form method="post" action="{{ url_for('autopilot_decide', cid=c.id) }}"><button class="btn small danger" name="action" value="reject">Avfärda</button></form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if groups['klara'] %}
+<details class="card" style="margin-top:20px"><summary>Historik ({{ groups['klara']|length }})</summary>
+  {% for c in groups['klara'] %}
+  <p class="small">{{ c.decided_at[:16] if c.decided_at else '' }} · <strong>{{ c.name }}</strong> <span class="pill {{ 'ok' if c.status == 'godkänd' else '' }}">{{ labels[c.status] }}</span>
+  {% if c.status == 'godkänd' and c.product %}
+    {% if c.product.shopify_admin_url %}<a href="{{ c.product.shopify_admin_url }}" target="_blank" rel="noopener">Shopify</a> · {% endif %}
+    Koppla i DSers: <code>{{ c.product.supplier_url }}</code>
+  {% elif c.product %}<a href="{{ url_for('product_page', pid=c.product.id) }}">Öppna produkt</a>{% endif %}
+  </p>
+  {% endfor %}
+</details>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+// Visa produkttexter säkert (utan skript och attribut).
+document.querySelectorAll('.desc-safe').forEach(el => {
+  const allowed = new Set(['P','UL','OL','LI','STRONG','B','EM','I','H2','H3','H4','BR']);
+  const doc = new DOMParser().parseFromString(el.dataset.html || '', 'text/html');
+  (function clean(n) { [...n.childNodes].forEach(c => { if (c.nodeType === 1) { if (!allowed.has(c.tagName)) { c.replaceWith(document.createTextNode(c.textContent)); return; } [...c.attributes].forEach(a => c.removeAttribute(a.name)); clean(c); } }); })(doc.body);
+  el.innerHTML = doc.body.innerHTML;
+});
+</script>
+{% endblock %}

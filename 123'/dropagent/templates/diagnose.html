@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}AliExpress-diagnos{% endblock %}
+{% block content %}
+<h1>🔧 AliExpress-diagnos</h1>
+<p class="muted">Visar exakt vad AliExpress skickar för en sökning och hur DropAgent tolkar det. Ta en skärmbild och skicka till den som hjälper dig med programmet.</p>
+<form method="get" class="row card">
+  <input type="text" name="q" value="{{ q or 'silicone baking mold' }}" style="flex:1">
+  <button class="btn primary">Sök och visa rådata</button>
+</form>
+{% if result %}<div class="card"><pre style="white-space:pre-wrap; font-size:12.5px; max-height:none">{{ result }}</pre></div>{% endif %}
+{% endblock %}

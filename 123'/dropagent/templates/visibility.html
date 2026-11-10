@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Synlighet{% endblock %}
+{% block content %}
+<h1>📣 Synlighet utan annonser</h1>
+<p class="muted">Agenterna gör dina produkter synliga i gratis kanaler: Google Shopping, Google-sök, AI-chattar, Instagram och Facebook.
+{% if meta_connected %}Kopplad till {{ page_name }}{% if ig_user %} och Instagram @{{ ig_user }}{% endif %}.{% else %}<a href="{{ url_for('settings_page') }}#Sociala">Koppla Instagram/Facebook</a> så kan videor publiceras automatiskt.{% endif %}</p>
+
+{% if running %}<div class="flash info">En agent arbetar just nu. <a href="{{ url_for('job_page', job_id=running.id, back=url_for('visibility_page')) }}">Visa status →</a></div>{% endif %}
+
+<div class="card">
+  <h2>1. Gratis kanaler i Shopify</h2>
+  {% if not cfg.shopify %}<p class="muted">Koppla Shopify under Inställningar först.</p>
+  {% elif ch_error %}<div class="flash error">Kunde inte läsa kanalerna: {{ ch_error }}<br><span class="small">Behörigheten <code>read_publications</code> behövs (se Hjälp → 5b).</span></div>
+  {% else %}
+  <div class="grid g3">
+    {% for key, c in channels.items() %}
+    <div class="stat">
+      <div class="spread"><strong>{{ c.label }}</strong>
+        {% if c.installed %}<span class="pill ok">Installerad</span>{% else %}<span class="pill warn">Saknas</span>{% endif %}</div>
+      <p class="small muted" style="margin:6px 0">{{ c.why }}</p>
+      {% if not c.installed %}<a class="btn small" href="{{ c.url }}" target="_blank" rel="noopener">Installera gratis ↗</a>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <p class="help" style="margin-top:10px">När en kanal är installerad: klicka <strong>Publicera i alla kanaler</strong> på produkterna nedan. För Google behöver du även godkänna Googles villkor i appen (Google Merchant Center skapas åt dig).</p>
+  {% endif %}
+</div>
+
+{% for p in items %}
+{% set seo = p.seo %}{% set ads = p.ads %}
+<div class="card" id="p{{ p.id }}">
+  <div class="spread">
+    <div>
+      <h2 style="margin-bottom:2px">{{ p.listing.titel or p.name }}</h2>
+      <span class="muted small">{{ sek(p.kalkyl.price) }} · vinst {{ sek(p.kalkyl.profit) }} per order</span>
+    </div>
+    <form method="post" action="{{ url_for('visibility_action', pid=p.id, action='publicera') }}"><button class="btn small" data-busy="Publicerar…">📢 Publicera i alla kanaler</button></form>
+  </div>
+
+  <div class="grid g3" style="margin-top:14px">
+    <!-- Sökagent -->
+    <div>
+      <h3>🔎 Google och AI-sök</h3>
+      {% if seo.status == 'förslag' %}
+        <p class="small"><strong>Ny titel:</strong> {{ seo.titel }}</p>
+        <p class="small"><strong>Google-titel:</strong> {{ seo.seo_titel }}<br><strong>Beskrivning:</strong> {{ seo.seo_beskrivning }}</p>
+        <p class="small"><strong>Sökord:</strong> {{ (seo.sokord or [])|join(', ') }}</p>
+        <details><summary class="small">Vanliga frågor ({{ seo.faq|length }}), läggs sist i produkttexten</summary>
+          {% for q in seo.faq %}<p class="small"><strong>{{ q.fraga }}</strong><br>{{ q.svar }}</p>{% endfor %}
+        </details>
+        <p class="small muted">{{ seo.motivering }}</p>
+        <form method="post" action="{{ url_for('visibility_action', pid=p.id, action='godkann_sok') }}" class="row" style="margin-top:6px">
+          <button class="btn ok small" data-confirm="Uppdatera produkten i Shopify med de nya texterna?">✓ Godkänn</button>
+        </form>
+        <form method="post" action="{{ url_for('visibility_action', pid=p.id, action='avfarda_sok') }}" style="margin-top:4px"><button class="btn small danger">Avfärda</button></form>
+      {% elif seo.status == 'godkänd' %}
+        <p class="small"><span class="pill ok">Optimerad {{ seo.applied_at[:10] }}</span></p>
+        <p class="small">{{ seo.titel }}{% if seo.kategori %}<br><span class="muted">Kategori: {{ seo.kategori }}</span>{% endif %}</p>
+        <form method="post" action="{{ url_for('visibility_action', pid=p.id, action='sok') }}"><button class="btn small" data-busy="Startar…">↻ Optimera igen</button></form>
+      {% else %}
+        <p class="small muted">Agenten tar reda på vad svenskar söker på och skriver om titel, Google-texter, kategori och vanliga frågor, så att produkten hittas i Google Shopping och AI-chattar.</p>
+        <form method="post" action="{{ url_for('visibility_action', pid=p.id, action='sok') }}"><button class="btn primary small" data-busy="Startar…">Optimera för Google och AI</button></form>
+        <p class="help">Ca 1–2 kr.</p>
+      {% endif %}
+    </div>
+
+    <!-- Annonskalkyl -->
+    <div>
+      <h3>💰 Lönar sig annonser?</h3>
+      <div class="note {{ 'info' if ads.level == 'ok' else '' }} small" style="{% if ads.level == 'err' %}background:var(--err-soft);color:var(--err){% endif %}">{{ ads.verdict }}</div>
+      <dl class="kv small" style="margin-top:8px">
+        <dt>Vinst per order</dt><dd>{{ sek(ads.profit) }}</dd>
+        <dt>Max annonskostnad per försäljning</dt><dd>{{ sek(ads.max_cpa) }}</dd>
+        {% if ads.test_budget %}<dt>Förslag på testbudget</dt><dd>{{ sek(ads.test_budget) }} totalt</dd>{% endif %}
+      </dl>
+      <p class="help">Gratis kanaler först. Annonser bara om produkten redan säljer och siffrorna håller.</p>
+    </div>
+
+    <!-- Videoagent -->
+    <div>
+      <h3>🎬 Videoagent</h3>
+      <p class="small muted">Gör en 15 sekunders säljvideo av produktbilderna och publicerar den på Instagram Reels och Facebook.</p>
+      <form method="post" action="{{ url_for('visibility_action', pid=p.id, action='video') }}"><button class="btn primary small" data-busy="Startar…">Skapa video nu</button></form>
+      <p class="help">Ca 0,5 kr per video. {% if not meta_connected %}<a href="{{ url_for('settings_page') }}#Sociala">Koppla Instagram/Facebook</a> för att publicera.{% endif %}</p>
+    </div>
+  </div>
+
+  {% if p.videos %}
+  <div class="grid g3" style="margin-top:14px">
+    {% for v in p.videos %}
+    <div class="preview small">
+      <video src="{{ url_for('video_file', vid=v.id) }}" controls preload="metadata" style="width:100%; border-radius:8px; background:#000; aspect-ratio:9/16"></video>
+      <div class="spread" style="margin-top:6px">
+        <span class="muted">{{ v.created_at[:16] }}</span>
+        <span class="pill {{ {'publicerad':'ok','delvis':'warn','fel':'err'}.get(v.status, '') }}">{{ {'utkast':'Ej publicerad','publicerad':'Publicerad','delvis':'Delvis publicerad','fel':'Fel'}.get(v.status, v.status) }}</span>
+      </div>
+      {% if v.error %}<p style="color:var(--err)">{{ v.error }}</p>{% endif %}
+      <details><summary>Text till inlägget</summary><div class="mail-body" style="margin-top:6px">{{ v.caption }}</div></details>
+      <div class="row" style="margin-top:6px">
+        {% if v.status != 'publicerad' %}<form method="post" action="{{ url_for('video_action', vid=v.id, action='publicera') }}"><button class="btn ok small" {% if not meta_connected %}disabled title="Koppla Instagram/Facebook först"{% endif %} data-confirm="Publicera videon på Instagram och Facebook nu?">📤 Publicera</button></form>{% endif %}
+        <a class="btn small" href="{{ url_for('video_file', vid=v.id, ladda=1) }}">⬇ Ladda ner</a>
+        <form method="post" action="{{ url_for('video_action', vid=v.id, action='radera') }}"><button class="btn small danger">Ta bort</button></form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="card empty">Inga publicerade produkter än. Lägg upp en produkt i Shopify via DropAgent, så dyker den upp här.</div>
+{% endfor %}
+
+<div class="card">
+  <h2>Kanaler vi hoppar över</h2>
+  <ul class="small">
+    <li><strong>Amazon och eBay:</strong> båda förbjuder att man köper från en annan återförsäljare (som AliExpress) som skickar direkt till kunden. Kontot kan stängas.</li>
+    <li><strong>TikTok Shop:</strong> finns inte i Sverige än.</li>
+    <li><strong>Automatisk publicering på TikTok och YouTube:</strong> deras API:er publicerar bara privat tills appen har granskats. Använd <em>Ladda ner</em> och lägg upp videon själv om du vill synas där.</li>
+    <li><strong>Prisjakt/PriceRunner:</strong> kräver en produktfeed via en Shopify-app. Värt att lägga till när butiken har flera produkter.</li>
+  </ul>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function copyText(btn) {
+  const t = btn.previousElementSibling.innerText;
+  navigator.clipboard.writeText(t).then(() => { btn.textContent = '✓ Kopierat'; setTimeout(() => btn.textContent = '📋 Kopiera text', 1500); });
+}
+</script>
+{% endblock %}

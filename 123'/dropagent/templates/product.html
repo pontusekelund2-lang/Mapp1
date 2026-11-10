@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}{{ p.name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('products_page') }}">← Alla produkter</a></p>
+<div class="spread">
+  <div>
+    <h1>{{ p.listing.titel or p.name }}</h1>
+    <span class="pill {{ 'ok' if p.status == 'publicerad' else ('acc' if p.status == 'utkast_klar' else '') }}">{{ status_labels.get(p.status, p.status) }}</span>
+    {% if p.shopify_admin_url %}<a class="btn small" href="{{ p.shopify_admin_url }}" target="_blank" rel="noopener">Öppna i Shopify ↗</a>{% endif %}
+  </div>
+  <form method="post" action="{{ url_for('product_delete', pid=p.id) }}"><button class="btn small danger" data-confirm="Ta bort produkten från listan?">Ta bort</button></form>
+</div>
+{% if p.error %}<div class="flash error" style="margin-top:12px">Senaste fel: {{ p.error }}</div>{% endif %}
+
+<div class="card" id="leverantor" style="margin-top:16px">
+  <div class="spread">
+    <div>
+      <h2>🤖 Leverantörsagenten</h2>
+      <p class="muted small">Agenten tar fram AliExpress-sökningar, läser dina skärmbilder, väljer bästa leverantör och en reserv, och fyller i kostnaderna nedan.</p>
+    </div>
+    <form method="post" action="{{ url_for('supplier_search', pid=p.id) }}"><button class="btn" data-busy="Startar…">🔎 1. Ge mig sökningar på AliExpress</button></form>
+  </div>
+
+  {% if sup.search and sup.search.searches %}
+  <div style="margin-top:6px">
+    <h3>Sök på AliExpress <span class="muted small">(sorterat på flest sålda · {{ sup.search.at[:16] }})</span></h3>
+    <ul class="small">{% for x in sup.search.searches %}<li><a href="{{ x.url }}" target="_blank" rel="noopener">{{ x.keywords }}</a> <span class="muted">– {{ x.why }}</span></li>{% endfor %}</ul>
+    <div class="note info small">{{ sup.search.tips }}<br>Öppna 2–3 annonser med högt betyg och många sålda, och ta skärmbilder av dem till steg 2.</div>
+  </div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('supplier_choose', pid=p.id) }}" enctype="multipart/form-data" style="margin-top:14px">
+    <h3>2. Ladda upp skärmbilder av 1–3 annonser</h3>
+    <p class="help">Öppna annonserna, ta skärmbilder (Windows: <kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, spara bilden) av produktsidan med pris, betyg, lager och frakt, och gärna av recensionerna och beskrivningen (batteri, laddning). Du kan välja flera bilder samtidigt.</p>
+    <div id="paste-zone" class="preview center" style="border-style:dashed; cursor:pointer">
+      <strong>📋 Klistra in skärmbild här med Ctrl+V</strong><br>
+      <span class="muted small">Ta en skärmbild med Win+Shift+S, klicka här och tryck Ctrl+V. Upprepa för fler bilder. Du kan också välja filer nedan.</span>
+      <div id="paste-preview" class="thumbs" style="justify-content:center; margin-top:8px"></div>
+    </div>
+    <input type="file" id="screens-input" name="screens" accept="image/png,image/jpeg,image/webp" multiple style="margin-top:8px">
+    {% if screens %}
+      <div class="thumbs" style="margin-top:10px">{% for f in screens %}<a href="{{ url_for('uploaded_file', pid=p.id, kind='screens', name=f) }}" target="_blank"><img src="{{ url_for('uploaded_file', pid=p.id, kind='screens', name=f) }}" alt=""></a>{% endfor %}</div>
+      <p class="help">{{ screens|length }} skärmbild(er) uppladdade.</p>
+    {% endif %}
+    <label>Länkar till annonserna, i samma ordning (valfritt men rekommenderas)</label>
+    <textarea name="links" style="min-height:60px" placeholder="https://www.aliexpress.com/item/....html&#10;https://www.aliexpress.com/item/....html"></textarea>
+    <label class="row" style="font-weight:500"><input type="checkbox" name="auto_listing" value="1" checked> Skriv produkttext och sätt pris direkt efteråt</label>
+    <div class="row" style="margin-top:10px">
+      <button class="btn primary" name="action" value="choose" data-busy="Startar…">🤖 3. Låt agenten välja leverantör</button>
+      <button class="btn small" name="action" value="upload_only">Bara ladda upp</button>
+    </div>
+  </form>
+  {% if screens %}<form method="post" action="{{ url_for('supplier_clear', pid=p.id) }}" style="margin-top:8px"><button class="btn small danger" data-confirm="Ta bort alla skärmbilder för den här produkten?">Ta bort skärmbilderna</button></form>{% endif %}
+
+  {% if sup.choice %}
+  {% set ch = sup.choice %}
+  <div style="margin-top:18px">
+    <h3>Agentens val <span class="muted small">({{ ch.at[:16] }})</span></h3>
+    <div class="note info small" style="margin-bottom:10px">{{ ch.motivering }}{% if ch.saknas %}<br><strong>Kontrollera själv:</strong> {{ ch.saknas }}{% endif %}</div>
+    <div class="table-wrap"><table class="small">
+      <tr><th></th><th>Annons</th><th>Pris</th><th>Betyg</th><th>Sålda</th><th>Lager</th><th>Leverans</th><th>Poäng</th></tr>
+      {% for c in ch.kandidater %}
+      <tr>
+        <td>{% if c.nr == ch.basta_nr %}<span class="pill ok">Bäst</span>{% elif c.nr == ch.reserv_nr %}<span class="pill acc">Reserv</span>{% else %}{{ c.nr }}{% endif %}</td>
+        <td>{% if c.url %}<a href="{{ c.url }}" target="_blank" rel="noopener">{{ c.titel[:60] or c.url }}</a>{% else %}{{ c.titel[:60] }}{% endif %}<br><span class="muted">{{ c.butik }}{% if c.choice %} · Choice{% endif %}{% if c.skickas_fran %} · från {{ c.skickas_fran }}{% endif %}</span>
+          {% if c.varningar %}<br><span style="color:var(--warn)">⚠ {{ c.varningar }}</span>{% endif %}
+          {% if c.logga_eller_varumarke %}<br><span style="color:var(--warn)">Logga/märke: {{ c.logga_eller_varumarke }}</span>{% endif %}</td>
+        <td>{{ sek(c.pris_sek) }}{% if c.frakt_sek %}<br><span class="muted">+{{ sek(c.frakt_sek) }} frakt</span>{% endif %}</td>
+        <td>{{ c.betyg or '–' }}{% if c.antal_recensioner %} ({{ c.antal_recensioner }}){% endif %}</td>
+        <td>{{ c.salda or '–' }}</td>
+        <td>{% if c.lager >= 0 %}<span class="{{ 'pill warn' if c.lager < 50 else '' }}">{{ c.lager }}</span>{% else %}–{% endif %}</td>
+        <td>{{ c.leverans or '–' }}</td>
+        <td><strong>{{ c.poang }}</strong></td>
+      </tr>
+      {% endfor %}
+    </table></div>
+  </div>
+  {% endif %}
+</div>
+
+<form method="post" action="{{ url_for('product_save', pid=p.id) }}">
+<div class="grid g2" style="margin-top:16px">
+  <div class="card">
+    <h2>1. Leverantör och kostnad</h2>
+    <label>Produktnamn (internt)</label>
+    <input type="text" name="name" value="{{ p.name }}">
+    <label>Länk till produkten på AliExpress</label>
+    <input type="text" name="supplier_url" value="{{ p.supplier_url }}" placeholder="https://www.aliexpress.com/item/...">
+    <div class="help">Hitta en säljare med bra betyg (helst 4,7+), många sålda och leverans från EU-lager om möjligt. Klistra in länken till den exakta produkten.</div>
+    {% if p.backup_url %}<div class="help">Reservleverantör: <a href="{{ p.backup_url }}" target="_blank" rel="noopener">{{ p.backup_url }}</a></div>{% endif %}
+    <div class="grid g2">
+      <div><label>Inköpspris (kr)</label><input type="number" step="0.01" name="purchase_price" value="{{ '%.2f'|format(p.purchase_price) }}"></div>
+      <div><label>Frakt (kr)</label><input type="number" step="0.01" name="shipping_cost" value="{{ '%.2f'|format(p.shipping_cost) }}"></div>
+    </div>
+    <div class="help">Inkludera importmoms och eventuell tull som du själv betalar.</div>
+    <label>Shopify-länk till produkten</label>
+    <input type="text" name="shopify_link" value="{{ p.shopify_admin_url }}" placeholder="https://admin.shopify.com/store/…/products/123456789">
+    <div class="help">Fylls i automatiskt när DropAgent lägger upp produkten. Har du skapat eller ändrat produkten direkt i Shopify: öppna den där och klistra in adressen.</div>
+    <label>Bildlänkar (en per rad)</label>
+    <textarea name="image_urls" placeholder="https://ae01.alicdn.com/kf/....jpg">{{ p.image_urls }}</textarea>
+    <div class="help">Högerklicka på en produktbild hos leverantören och välj "Kopiera bildadress". Använd bara bilder du har rätt att använda; leverantörens produktbilder är oftast ok.</div>
+    {% if p.images %}<div class="thumbs" style="margin-top:8px">{% for u in p.images %}<img src="{{ u }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endfor %}</div>{% endif %}
+    <label>Anteckningar till agenten</label>
+    <textarea name="notes" placeholder="T.ex. finns i 3 färger, kommer med USB-C-kabel, ska riktas till hundägare">{{ p.notes }}</textarea>
+  </div>
+
+  <div class="card">
+    <h2>Kalkyl</h2>
+    <dl class="kv">
+      <dt>Kundpris (inkl. moms)</dt><dd>{{ sek(p.kalkyl.price) }}</dd>
+      <dt>– Moms</dt><dd>{{ sek(p.kalkyl.vat) }}</dd>
+      <dt>– Betalavgift</dt><dd>{{ sek(p.kalkyl.fee) }}</dd>
+      <dt>– Inköp och frakt</dt><dd>{{ sek(p.kalkyl.cost) }}</dd>
+      <dt>= Vinst per order</dt><dd>{{ sek(p.kalkyl.profit) }} <span class="pill {{ 'ok' if p.kalkyl.ok else 'warn' }}">{{ p.kalkyl.margin|pct }} marginal</span></dd>
+    </dl>
+    <p class="muted small" style="margin-top:10px">Vinsten är före annonskostnad. Om du betalar 50 kr i annonser per såld vara behöver vinsten vara klart högre än så.</p>
+    {% if p.trend %}
+    <h3 style="margin-top:16px">Från trendrapporten</h3>
+    <p class="small">{{ p.trend.varfor_trendar }}</p>
+    <p class="small"><strong>Risker:</strong> {{ p.trend.risker }}</p>
+    {% endif %}
+    {% if p.listing.annonstext %}
+    <h3 style="margin-top:16px">Förslag på annonstext</h3>
+    <div class="preview small">{{ p.listing.annonstext }}</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="spread">
+    <h2>2. Produkttext och pris</h2>
+    <button class="btn {{ '' if p.listing else 'primary' }}" name="action" value="generate" data-busy="Startar…">✨ {{ 'Generera om' if p.listing else 'Låt agenten skriva produkttext och sätta pris' }}</button>
+  </div>
+  {% if p.listing %}
+  <div class="grid g2">
+    <div>
+      <label>Titel</label><input type="text" name="titel" value="{{ p.listing.titel }}">
+      <div class="grid g2">
+        <div><label>Pris (kr, inkl. moms)</label><input type="number" step="1" name="pris_sek" value="{{ p.listing.pris_sek|int }}"></div>
+        <div><label>Jämförpris (kr, 0 = inget)</label><input type="number" step="1" name="jamforpris_sek" value="{{ (p.listing.jamforpris_sek or 0)|int }}"></div>
+      </div>
+      <div class="help">{{ p.listing.prismotivering }}</div>
+      {% if p.listing.konkurrentpriser %}
+      <details style="margin-top:8px"><summary>Konkurrenternas priser</summary>
+        <ul class="small">{% for c in p.listing.konkurrentpriser %}<li>{{ c }}</li>{% endfor %}</ul></details>
+      {% endif %}
+      <label>Taggar (kommaseparerade)</label><input type="text" name="taggar" value="{{ (p.listing.taggar or [])|join(', ') }}">
+      <label>Produkttyp</label><input type="text" name="produkttyp" value="{{ p.listing.produkttyp }}">
+      <label>SEO-beskrivning</label><input type="text" name="seo_beskrivning" value="{{ p.listing.seo_beskrivning }}">
+      <label>Beskrivning (HTML)</label>
+      <textarea class="tall" name="beskrivning_html">{{ p.listing.beskrivning_html }}</textarea>
+    </div>
+    <div>
+      <label>Förhandsvisning</label>
+      <div class="preview">
+        <h2>{{ p.listing.titel }}</h2>
+        <p><strong style="font-size:20px">{{ sek(p.listing.pris_sek) }}</strong>
+          {% if p.listing.jamforpris_sek and p.listing.jamforpris_sek > p.listing.pris_sek %}<s class="muted">{{ sek(p.listing.jamforpris_sek) }}</s>{% endif %}</p>
+        <div id="desc-preview"></div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <p class="muted">Fyll i inköpspris och leverantörslänk ovan först. Då blir prisförslaget bättre.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="row">
+    <button class="btn" name="action" value="save">💾 Spara ändringar</button>
+    {% if p.listing %}
+    <button class="btn primary" name="action" value="publish" {% if not cfg.shopify %}disabled title="Koppla Shopify först"{% endif %}
+      data-confirm="Lägga upp produkten i Shopify som utkast? Den syns inte för kunder förrän du aktiverar den i Shopify.">
+      🚀 {{ 'Lägg upp igen (ny kopia)' if p.shopify_id else 'Godkänn och lägg upp i Shopify (utkast)' }}</button>
+    {% endif %}
+  </div>
+  {% if p.status == 'publicerad' %}
+  <div class="note info" style="margin-top:14px">
+    <strong>Nästa steg:</strong>
+    <ol style="margin:6px 0 0 0">
+      <li>Öppna produkten i Shopify, granska den och ändra status till <em>Aktiv</em>.</li>
+      <li>Öppna DSers → <em>Products</em> → leta upp produkten → <em>Map</em> (koppla) den till AliExpress-länken ovan. Då skickas ordrar automatiskt rätt.</li>
+      <li>Beställ gärna ett provexemplar till dig själv först.</li>
+    </ol>
+  </div>
+  {% endif %}
+</div>
+</form>
+
+<div class="card" id="bilder">
+  <h2>Produktbilder från datorn</h2>
+  <p class="help">Ladda upp egna bilder (t.ex. foton på ditt provexemplar) eller bilder du har sparat från leverantören. De skickas till Shopify när du lägger upp produkten.</p>
+  <form method="post" action="{{ url_for('product_images', pid=p.id) }}" enctype="multipart/form-data" class="row" style="margin-top:8px">
+    <input type="file" name="images" accept="image/png,image/jpeg,image/webp" multiple>
+    <button class="btn">Ladda upp</button>
+  </form>
+  {% if uploaded %}
+  <div class="thumbs" style="margin-top:12px">
+    {% for f in uploaded %}
+    <div style="text-align:center">
+      <img src="{{ url_for('uploaded_file', pid=p.id, kind='images', name=f) }}" alt="">
+      <form method="post" action="{{ url_for('product_image_delete', pid=p.id, name=f) }}"><button class="btn small danger" style="margin-top:4px">Ta bort</button></form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+// Klistra in skärmbilder (Ctrl+V) i leverantörsagenten.
+(function () {
+  const input = document.getElementById('screens-input');
+  const zone = document.getElementById('paste-zone');
+  const preview = document.getElementById('paste-preview');
+  if (!input || !zone) return;
+  const dt = new DataTransfer();
+  function sync() {
+    input.files = dt.files;
+    preview.innerHTML = '';
+    [...dt.files].forEach(f => { const i = document.createElement('img'); i.src = URL.createObjectURL(f); preview.appendChild(i); });
+  }
+  input.addEventListener('change', () => { [...input.files].forEach(f => { if (![...dt.files].includes(f)) dt.items.add(f); }); sync(); });
+  document.addEventListener('paste', e => {
+    const items = [...(e.clipboardData || {}).items || []].filter(it => it.type.startsWith('image/'));
+    if (!items.length) return;
+    e.preventDefault();
+    items.forEach((it, n) => {
+      const blob = it.getAsFile();
+      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+      dt.items.add(new File([blob], 'skarmbild-' + Date.now() + '-' + n + '.' + ext, { type: blob.type }));
+    });
+    sync();
+    zone.scrollIntoView({ block: 'center' });
+  });
+  zone.addEventListener('click', () => zone.focus());
+})();
+</script>
+<script>
+// Visar HTML-beskrivningen säkert (utan skript) i förhandsvisningen.
+(function () {
+  const ta = document.querySelector('textarea[name="beskrivning_html"]');
+  const out = document.getElementById('desc-preview');
+  if (!ta || !out) return;
+  const allowed = new Set(['P','UL','OL','LI','STRONG','B','EM','I','H2','H3','H4','BR','SPAN','DIV']);
+  function render() {
+    const doc = new DOMParser().parseFromString(ta.value, 'text/html');
+    function clean(node) {
+      [...node.childNodes].forEach(c => {
+        if (c.nodeType === 1) {
+          if (!allowed.has(c.tagName)) { c.replaceWith(document.createTextNode(c.textContent)); return; }
+          [...c.attributes].forEach(a => c.removeAttribute(a.name));
+          clean(c);
+        }
+      });
+    }
+    clean(doc.body);
+    out.innerHTML = doc.body.innerHTML;
+  }
+  ta.addEventListener('input', render); render();
+})();
+</script>
+{% endblock %}

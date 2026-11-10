@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Översikt{% endblock %}
+{% block content %}
+<h1>Hej! 👋</h1>
+<p class="muted">Här ser du läget i din butik och vad som väntar på dig.</p>
+
+{% if not (cfg.claude and cfg.shopify and cfg.gmail) %}
+<div class="card">
+  <h2>Kom igång</h2>
+  <ol class="checklist">
+    <li>{% if cfg.claude %}✅{% else %}⬜{% endif %} <strong>Anthropic API-nyckel</strong>: krävs för alla AI-funktioner. <a href="{{ url_for('settings_page') }}">Lägg in →</a></li>
+    <li>{% if cfg.shopify %}✅{% else %}⬜{% endif %} <strong>Shopify</strong>: krävs för att lägga upp produkter, se ordrar och återbetala. <a href="{{ url_for('settings_page') }}#Shopify">Koppla →</a></li>
+    <li>{% if cfg.gmail %}✅{% else %}⬜{% endif %} <strong>Gmail</strong>: krävs för att kundtjänstagenten ska kunna läsa och svara på mejl. <a href="{{ url_for('settings_page') }}#Gmail">Koppla →</a></li>
+    <li>⬜ <strong>DSers</strong>: installera DSers-appen i Shopify så att ordrar skickas vidare till AliExpress (se <a href="{{ url_for('help_page') }}" target="_blank">Hjälp-sidan</a>).</li>
+  </ol>
+  <p class="muted small">Tips: du kan börja med bara Anthropic-nyckeln och testa trendagenten direkt.</p>
+</div>
+{% endif %}
+
+<div class="grid g4" style="margin-bottom:16px">
+  <div class="stat"><div class="num">{{ pending_count }}</div><div class="lbl">Kundärenden som väntar</div></div>
+  <div class="stat"><div class="num">{{ prod_counts.get('sparad', 0) + prod_counts.get('utkast_klar', 0) }}</div><div class="lbl">Produkter på gång</div></div>
+  <div class="stat"><div class="num">{{ prod_counts.get('publicerad', 0) }}</div><div class="lbl">Produkter i Shopify</div></div>
+  <div class="stat"><div class="num">{{ sek(usage.month_sek) }}</div><div class="lbl">AI-kostnad denna månad (uppskattad)</div></div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <div class="spread"><h2>Väntar på dig</h2><a class="btn small" href="{{ url_for('support_page') }}">Kundtjänst →</a></div>
+    {% for t in tickets %}
+      <p><a href="{{ url_for('support_page') }}#t{{ t.id }}">{{ t.subject }}</a><br>
+      <span class="muted small">{{ t.from_name or t.from_addr }} · {{ t.received_at }}</span>
+      {% if t.status == 'fel' %}<span class="pill err">Fel</span>{% endif %}</p>
+    {% else %}
+      <p class="muted">Inga ärenden väntar. 🎉</p>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <div class="spread"><h2>Senaste trendrapporter</h2><a class="btn small primary" href="{{ url_for('trends_page') }}">Ny analys →</a></div>
+    {% for r in reports %}
+      <p><a href="{{ url_for('report_page', report_id=r.id) }}">{{ 'Trendanalys' if r.kind == 'trend' else 'Länkanalys' }} {{ r.created_at[:16] }}</a>
+      {% if r.focus and r.kind == 'trend' %}<span class="pill">{{ r.focus[:40] }}</span>{% endif %}<br>
+      <span class="muted small">{{ r.summary[:160] }}{% if r.summary|length > 160 %}…{% endif %}</span></p>
+    {% else %}
+      <p class="muted">Ingen analys än. Kör din första trendanalys!</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Senaste händelser</h2>
+  {% for a in activity %}
+    <div class="small"><span class="muted">{{ a.created_at[5:16] }}</span> &nbsp;
+      {% if a.level == 'error' %}<span class="pill err">fel</span>{% elif a.level == 'warning' %}<span class="pill warn">varning</span>{% endif %}
+      {{ a.text }}</div>
+  {% else %}
+    <p class="muted">Inget har hänt än.</p>
+  {% endfor %}
+</div>
+{% endblock %}

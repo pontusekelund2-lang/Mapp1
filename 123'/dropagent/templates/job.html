@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Arbetar…{% endblock %}
+{% block content %}
+<div class="card center" style="max-width:560px; margin:40px auto">
+  <div id="spin" class="spinner"></div>
+  <h2 id="title">Agenten arbetar…</h2>
+  <p id="msg" class="muted">{{ job.message if job else '' }}</p>
+  <p class="muted small" id="time"></p>
+  <p id="actions" style="display:none"><a class="btn" href="{{ back }}">Tillbaka</a></p>
+  <p class="muted small">Du kan lämna sidan. Jobbet fortsätter i bakgrunden.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const id = {{ job.id if job else 0 }};
+  const start = Date.now();
+  async function poll() {
+    let d;
+    try { d = await (await fetch('/api/jobb/' + id)).json(); } catch (e) { setTimeout(poll, 3000); return; }
+    document.getElementById('msg').textContent = d.message || '';
+    document.getElementById('time').textContent = Math.round((Date.now() - start) / 1000) + ' sekunder';
+    if (d.status === 'done') {
+      document.getElementById('title').textContent = 'Klart!';
+      window.location = d.result_url || {{ back|tojson }};
+    } else if (d.status === 'error') {
+      document.getElementById('spin').style.display = 'none';
+      document.getElementById('title').textContent = 'Något gick fel';
+      document.getElementById('msg').className = 'flash error';
+      document.getElementById('actions').style.display = 'block';
+    } else {
+      setTimeout(poll, 2000);
+    }
+  }
+  poll();
+})();
+</script>
+{% endblock %}

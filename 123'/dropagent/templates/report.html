@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Rapport{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('trends_page') }}">← Alla rapporter</a></p>
+<div class="spread">
+  <div>
+    <h1>{{ 'Trendanalys' if r.kind == 'trend' else 'Länkanalys' }}</h1>
+    <p class="muted">{{ r.created_at[:16] }}{% if r.focus and r.kind == 'trend' %} · Fokus: {{ r.focus }}{% endif %}</p>
+  </div>
+  <form method="post" action="{{ url_for('report_delete', report_id=r.id) }}"><button class="btn small danger" data-confirm="Radera rapporten?">Radera rapport</button></form>
+</div>
+
+<div class="card"><h2>Sammanfattning</h2><p>{{ r.summary }}</p>
+  <p class="muted small">Siffrorna är AI-uppskattningar. Kontrollera alltid det verkliga priset hos leverantören och beställ gärna ett provexemplar innan du börjar sälja.</p>
+</div>
+
+{% for p in r.products %}
+{% set i = loop.index0 %}
+<div class="card" id="p{{ i }}">
+  <div class="spread">
+    <div class="row" style="align-items:flex-start; flex-wrap:nowrap">
+      <div class="score {{ 'hi' if p.totalbetyg >= 70 else ('mid' if p.totalbetyg >= 45 else 'lo') }}" title="Totalbetyg">{{ p.totalbetyg }}</div>
+      <div>
+        <h2 style="margin-bottom:2px">{{ loop.index }}. {{ p.namn }}</h2>
+        <span class="pill">{{ p.kategori }}</span> <span class="pill">{{ p.malgrupp }}</span>
+        {% if not p.kalkyl.ok %}<span class="pill warn">Låg marginal</span>{% endif %}
+      </div>
+    </div>
+    <div class="row">
+      {% if p.namn in saved %}
+        <a class="btn ok small" href="{{ url_for('product_page', pid=saved[p.namn]) }}">✓ Sparad, öppna</a>
+      {% else %}
+        <form method="post" action="{{ url_for('report_save', report_id=r.id, index=i) }}" class="inline"><button class="btn small">☆ Spara</button></form>
+        <form method="post" action="{{ url_for('report_save', report_id=r.id, index=i) }}" class="inline"><input type="hidden" name="go" value="1"><button class="btn primary small">Spara och skapa produktsida →</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px">
+    <div>
+      <p>{{ p.beskrivning }}</p>
+      <h3>Varför den trendar</h3><p>{{ p.varfor_trendar }}</p>
+      <h3>Risker</h3><p>{{ p.risker }}</p>
+      <h3>Marknadsföringsidé</h3><p>{{ p.marknadsforingside }}</p>
+    </div>
+    <div>
+      <dl class="kv">
+        <dt>Inköp (uppsk.)</dt><dd>{{ sek(p.uppskattat_inkopspris_sek) }}</dd>
+        <dt>Föreslaget pris</dt><dd>{{ sek(p.foreslaget_pris_sek) }}</dd>
+        <dt>Vinst per order*</dt><dd>{{ sek(p.kalkyl.profit) }} ({{ p.kalkyl.margin|pct }})</dd>
+      </dl>
+      <p class="muted small">*Före annonskostnad, efter moms och betalavgift.</p>
+      <div class="bars" style="margin:12px 0">
+        <span>Efterfrågan</span><div class="bar"><span style="width:{{ p.efterfragan * 10 }}%"></span></div><span>{{ p.efterfragan }}/10</span>
+        <span>Konkurrens</span><div class="bar inv"><span style="width:{{ p.konkurrens * 10 }}%"></span></div><span>{{ p.konkurrens }}/10</span>
+        <span>Returrisk</span><div class="bar inv"><span style="width:{{ p.returrisk * 10 }}%"></span></div><span>{{ p.returrisk }}/10</span>
+      </div>
+      <p><a class="btn small" href="{{ p.ali_url }}" target="_blank" rel="noopener">Sök på AliExpress ↗</a>
+         <span class="muted small">Sökord: {{ p.sokord_aliexpress }}</span></p>
+      {% if p.kallor %}
+      <details><summary>Källor ({{ p.kallor|length }})</summary>
+        <div class="sources">{% for s in p.kallor %}<a href="{{ s }}" target="_blank" rel="noopener">{{ s }}</a>{% endfor %}</div>
+      </details>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card empty">Rapporten innehåller inga produkter.</div>
+{% endfor %}
+
+<details class="card"><summary>Visa agentens råa researchanteckningar</summary>
+  <div class="mail-body" style="max-height:600px; margin-top:12px">{{ r.research_text }}</div>
+</details>
+{% endblock %}

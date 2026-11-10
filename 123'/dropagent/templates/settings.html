@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Inställningar{% endblock %}
+{% block scripts %}
+<script>
+function submitMetaToken() {
+  const f = document.createElement('form'); f.method = 'post'; f.action = '{{ url_for('meta_connect') }}';
+  for (const [n, v] of [['token', document.getElementById('meta_token_paste').value], ['csrf', window.dropagentCsrf]]) {
+    const i = document.createElement('input'); i.type = 'hidden'; i.name = n; i.value = v; f.appendChild(i);
+  }
+  document.body.appendChild(f); f.submit();
+}
+function submitAeCode() {
+  const f = document.createElement('form'); f.method = 'post'; f.action = '{{ url_for('aliexpress_code') }}';
+  for (const [n, v] of [['code', document.getElementById('ae_code_paste').value], ['csrf', window.dropagentCsrf]]) {
+    const i = document.createElement('input'); i.type = 'hidden'; i.name = n; i.value = v; f.appendChild(i);
+  }
+  document.body.appendChild(f); f.submit();
+}
+</script>
+{% endblock %}
+{% block content %}
+<h1>Inställningar</h1>
+<p class="muted">Allt sparas bara på din dator (i mappen <code>data</code>). Steg-för-steg-hjälp finns på <a href="{{ url_for('help_page') }}" target="_blank">Hjälp-sidan</a>.</p>
+
+<form method="post">
+{% for group, keys in groups %}
+<div class="card" id="{{ group.split(' ')[0] }}">
+  <div class="spread">
+    <h2>{{ group }}</h2>
+    {% if group.startswith('Claude') %}<div><button type="button" class="btn small" onclick="testConnection('claude', this)">Testa</button><span id="test-claude" class="test-result"></span></div>{% endif %}
+    {% if group.startswith('Shopify') %}<div><button type="button" class="btn small" onclick="testConnection('shopify', this)">Testa</button><span id="test-shopify" class="test-result"></span></div>{% endif %}
+    {% if group.startswith('AliExpress') %}<div><button type="button" class="btn small" onclick="testConnection('aliexpress', this)">Testa</button><span id="test-aliexpress" class="test-result"></span></div>{% endif %}
+    {% if group.startswith('Gmail') %}<div><button type="button" class="btn small" onclick="testConnection('gmail', this)">Testa</button><span id="test-gmail" class="test-result"></span></div>{% endif %}
+  </div>
+  {% if group.startswith('Shopify') %}
+    <p class="help">Använd <strong>antingen</strong> en Admin API-token (shpat_…) <strong>eller</strong> Client ID + Client Secret. Scopes som behövs: read_products, write_products, read_orders, write_orders, read_customers. Se Hjälp-sidan.</p>
+  {% endif %}
+  {% if group.startswith('Sociala') %}
+    <p class="help">Videoagenten publicerar på Instagram Reels och Facebook. Kräver en Facebook-sida med ett Instagram-konto (Business eller Creator) kopplat. Steg för steg finns på Hjälp-sidan under 5d.</p>
+    <p class="row" style="margin-top:6px">
+      {% if meta_connected %}<span class="pill ok">Kopplad: {{ meta_page }}{% if meta_ig %} · @{{ meta_ig }}{% endif %}</span>{% else %}<span class="pill warn">Inte kopplad</span>{% endif %}
+    </p>
+    <div class="row" style="margin-top:6px"><input type="text" id="meta_token_paste" placeholder="Klistra in token från Graph API Explorer" style="flex:1">
+      <button type="button" class="btn small" onclick="submitMetaToken()">🔗 Koppla</button></div>
+    <p class="help">Spara App ID och App Secret först.</p>
+  {% endif %}
+  {% if group.startswith('AliExpress') %}
+    <p class="help">Fyll i App Key och App Secret och klicka Spara. Koppla sedan ditt konto, vilket krävs för lager, frakt och leveranstid via Dropshipping-API:t.</p>
+    <p class="row" style="margin-top:6px">
+      {% if cfg.aliexpress_token %}<span class="pill ok">Konto kopplat</span>{% else %}<span class="pill warn">Konto inte kopplat</span>{% endif %}
+      <a class="btn small" href="{{ url_for('aliexpress_diagnose') }}">🔧 Diagnos</a>
+      <a class="btn small" href="{{ url_for('aliexpress_connect') }}">🔗 {{ 'Koppla om' if cfg.aliexpress_token else 'Koppla' }} AliExpress-konto</a>
+    </p>
+    <details style="margin-top:6px"><summary class="small">Fungerade inte kopplingen? Klistra in koden manuellt</summary>
+      <p class="help">Efter att du godkänt på AliExpress skickas du till en adress som innehåller <code>code=…</code>. Om sidan inte laddas, kopiera hela adressen från adressfältet och klistra in den här.</p>
+      <div class="row"><input type="text" name="ae_code_paste" id="ae_code_paste" placeholder="https://…?code=…" style="flex:1">
+      <button type="button" class="btn small" onclick="submitAeCode()">Koppla</button></div>
+    </details>
+  {% endif %}
+  {% for key in keys %}
+    {% set f = fields[key] %}
+    <label for="{{ key }}">{{ f[1] }}</label>
+    {% if f[2] == 'textarea' %}
+      <textarea id="{{ key }}" name="{{ key }}">{{ values[key] }}</textarea>
+    {% elif f[2] == 'secret' %}
+      <input type="password" id="{{ key }}" name="{{ key }}" value="" autocomplete="off"
+        placeholder="{{ '•••••••• sparad (lämna tomt för att behålla)' if values[key] else 'Inte inlagd' }}">
+    {% elif f[2] == 'model' %}
+      <select id="{{ key }}" name="{{ key }}">
+        {% for m, lbl in models.items() %}<option value="{{ m }}" {% if values[key] == m %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+      </select>
+    {% elif f[2] == 'choice' %}
+      <select id="{{ key }}" name="{{ key }}">
+        {% for v, lbl in choices[key].items() %}<option value="{{ v }}" {% if values[key] == v %}selected{% endif %}>{{ lbl }}</option>{% endfor %}
+      </select>
+    {% elif f[2] == 'bool' %}
+      <select id="{{ key }}" name="{{ key }}">
+        <option value="0" {% if values[key] != '1' %}selected{% endif %}>Av</option>
+        <option value="1" {% if values[key] == '1' %}selected{% endif %}>På</option>
+      </select>
+    {% elif f[2] == 'number' %}
+      <input type="number" step="any" id="{{ key }}" name="{{ key }}" value="{{ values[key] }}">
+    {% else %}
+      <input type="text" id="{{ key }}" name="{{ key }}" value="{{ values[key] }}">
+    {% endif %}
+    {% if f[3] %}<div class="help">{{ f[3] }}</div>{% endif %}
+  {% endfor %}
+</div>
+{% endfor %}
+<div class="card row" style="position:sticky; bottom:10px">
+  <button class="btn primary">💾 Spara inställningar</button>
+  <span class="muted small">Spara först och klicka sedan på Testa.</span>
+</div>
+</form>
+{% endblock %}

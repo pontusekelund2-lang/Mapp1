@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Kundtjänst{% endblock %}
+{% block content %}
+<div class="spread">
+  <div>
+    <h1>Kundtjänst och returer</h1>
+    <p class="muted">Agenten läser kundmejl, kollar ordern i Shopify och föreslår svar och åtgärd. Inget skickas förrän du godkänner det.</p>
+  </div>
+  <div class="row">
+    <form method="post" action="{{ url_for('support_fetch') }}"><button class="btn primary" data-busy="Hämtar…" {% if running %}disabled{% endif %}>📥 Hämta nya mejl</button></form>
+  </div>
+</div>
+{% if running %}<div class="flash info">Mejl hämtas just nu. <a href="{{ url_for('job_page', job_id=running.id, back=url_for('support_page')) }}">Visa status →</a></div>{% endif %}
+
+<div class="row" style="margin:6px 0 16px">
+  <a class="btn small {{ 'primary' if show != 'alla' }}" href="{{ url_for('support_page') }}">Att hantera</a>
+  <a class="btn small {{ 'primary' if show == 'alla' }}" href="{{ url_for('support_page', visa='alla') }}">Alla ärenden</a>
+</div>
+
+{% for t in tickets %}
+<div class="card" id="t{{ t.id }}">
+  <div class="spread">
+    <div>
+      <h2 style="margin-bottom:2px">{{ t.subject }}</h2>
+      <span class="muted small">{{ t.from_name }} &lt;{{ t.from_addr }}&gt; · {{ t.received_at }}</span><br>
+      {% if t.ai %}
+        <span class="pill acc">{{ cat_labels.get(t.ai.kategori, t.ai.kategori) }}</span>
+        <span class="pill {{ 'err' if t.ai.kundens_humor in ('arg','irriterad') else '' }}">Kund: {{ t.ai.kundens_humor }}</span>
+        {% if t.ai.osaker %}<span class="pill warn">⚠ Agenten är osäker, läs noga</span>{% endif %}
+      {% endif %}
+      {% if t.order_name %}<span class="pill ok">Order {{ t.order_name }}</span>{% else %}<span class="pill">Ingen order hittad</span>{% endif %}
+    </div>
+    {% if t.handled_note and t.handled_note.startswith('Automatiskt') %}<span class="pill acc">🤖 Auto</span>{% endif %}
+    <span class="pill {{ {'väntar':'warn','skickad':'ok','fel':'err','avfärdad':''}.get(t.status, 'acc') }}">{{ {'väntar':'Väntar på dig','skickad':'Klar','fel':'Fel','avfärdad':'Avfärdad','ny':'Ny','analyserar':'Analyseras…'}.get(t.status, t.status) }}</span>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px">
+    <div>
+      <h3>Kundens meddelande</h3>
+      <div class="mail-body">{{ t.body }}</div>
+      {% if t.attachments %}<p class="small muted">📎 Bilagor: {{ t.attachments }} (öppna i Gmail för att se dem)</p>{% endif %}
+      {% if t.order %}
+      <details style="margin-top:10px"><summary>Orderinformation</summary>
+        <dl class="kv small" style="margin-top:8px">
+          <dt>Order</dt><dd><a href="{{ t.order.admin_url }}" target="_blank" rel="noopener">{{ t.order.name }}</a> ({{ t.order.created_at }})</dd>
+          <dt>Summa</dt><dd>{{ sek(t.order.total) }}{% if t.order.refunded %} (redan återbetalt {{ sek(t.order.refunded) }}){% endif %}</dd>
+          <dt>Status</dt><dd>{{ t.order.financial }} / {{ t.order.fulfillment }}</dd>
+          <dt>Varor</dt><dd>{% for i in t.order['items'] %}{{ i.qty }} × {{ i.title }}<br>{% endfor %}</dd>
+          <dt>Spårning</dt><dd>{% for tr in t.order.tracking %}{{ tr.number }} {{ tr.company }}<br>{% else %}–{% endfor %}</dd>
+        </dl>
+      </details>
+      {% endif %}
+    </div>
+
+    <div>
+      {% if t.status in ('väntar', 'fel', 'ny') %}
+        {% if t.status == 'fel' %}<div class="flash error">{{ t.error }}</div>{% endif %}
+        {% if t.handled_note and t.handled_note.startswith('Väntar på dig') %}<div class="note small" style="margin-bottom:10px">🤖 Skickades inte automatiskt. {{ t.handled_note[15:] }}</div>{% endif %}
+        {% if t.ai %}
+          <div class="note info small" style="margin-bottom:10px">
+            <strong>Agentens förslag:</strong> {{ action_labels.get(t.ai.foreslagen_atgard, t.ai.foreslagen_atgard) }}<br>
+            {{ t.ai.motivering }}
+            {% if t.ai.att_gora_for_agaren %}<br><strong>Du behöver själv:</strong> {{ t.ai.att_gora_for_agaren }}{% endif %}
+          </div>
+        {% endif %}
+        <form method="post" action="{{ url_for('support_approve', tid=t.id) }}">
+          <label>Svar till kunden (redigera fritt)</label>
+          <textarea name="reply_text" style="min-height:220px">{{ t.reply_text }}</textarea>
+          {% if t.order %}
+          <div class="row" style="margin-top:10px">
+            <label class="row" style="margin:0; font-weight:500"><input type="checkbox" name="do_refund" value="1" {% if t.refund_amount > 0 and not t.refunded %}checked{% endif %}> Återbetala</label>
+            <input type="number" step="0.01" name="refund_amount" value="{{ '%.2f'|format(t.refund_amount) }}" style="width:120px"> kr
+            {% if t.refunded %}<span class="pill warn">Redan återbetalt {{ sek(t.refunded) }}</span>{% endif %}
+          </div>
+          <div class="help">Pengarna går tillbaka via samma betalsätt som kunden använde. Kom ihåg att avbeställa i DSers/AliExpress om varan inte har skickats än.</div>
+          {% endif %}
+          <div class="row" style="margin-top:12px">
+            <button class="btn ok" name="action" value="send" data-confirm="Skicka svaret (och genomföra eventuell återbetalning)?">✓ Godkänn och skicka</button>
+            <button class="btn small" name="action" value="done" data-confirm="Markera som klart utan att skicka mejl? (Eventuell ikryssad återbetalning görs ändå.)">Klart utan mejl</button>
+            <button class="btn small danger" name="action" value="dismiss">Avfärda</button>
+          </div>
+        </form>
+        <form method="post" action="{{ url_for('support_analyze', tid=t.id) }}" style="margin-top:8px"><button class="btn small" data-busy="Analyserar…">↻ Låt agenten analysera igen</button></form>
+      {% elif t.status == 'analyserar' %}
+        <p class="muted">Agenten analyserar ärendet… Ladda om sidan om en stund.</p>
+      {% else %}
+        <h3>Ditt svar</h3>
+        <div class="mail-body">{{ t.reply_text or '–' }}</div>
+        <p class="small muted" style="margin-top:8px">{{ t.handled_note }} ({{ t.handled_at }})</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card empty">{{ 'Inga ärenden att hantera just nu. 🎉' if show != 'alla' else 'Inga ärenden än.' }}</div>
+{% endfor %}
+
+<details class="card">
+  <summary>➕ Skapa ärende manuellt (t.ex. från Instagram, Facebook eller telefon)</summary>
+  <form method="post" action="{{ url_for('support_manual') }}">
+    <div class="grid g2">
+      <div><label>Kundens e-post</label><input type="email" name="from_addr" required></div>
+      <div><label>Kundens namn</label><input type="text" name="from_name"></div>
+    </div>
+    <label>Ämne</label><input type="text" name="subject">
+    <label>Kundens meddelande</label><textarea name="body" required></textarea>
+    <p style="margin-top:12px"><button class="btn primary" data-busy="Analyserar…">Analysera</button></p>
+    <p class="help">Svaret skickas till kundens e-post via din Gmail när du godkänner det.</p>
+  </form>
+</details>
+{% endblock %}

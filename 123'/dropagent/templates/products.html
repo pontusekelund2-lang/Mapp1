@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Produkter{% endblock %}
+{% block content %}
+<h1>Produkter</h1>
+<p class="muted">Produkter du har sparat. Här låter du agenten skriva produkttext och sätta pris, och sedan lägger du upp produkten i Shopify.</p>
+
+<div class="card">
+  <h2>Lägg till en egen produktidé</h2>
+  <form method="post" action="{{ url_for('product_new') }}" class="row">
+    <input type="text" name="name" placeholder="Produktnamn, t.ex. Magnetisk kabelhållare" style="flex:2; min-width:220px">
+    <input type="text" name="notes" placeholder="Anteckningar (valfritt)" style="flex:3; min-width:220px">
+    <button class="btn primary">Lägg till</button>
+  </form>
+</div>
+
+<div class="card">
+  {% if items %}
+  <div class="table-wrap"><table>
+    <tr><th>Produkt</th><th>Status</th><th>Inköp</th><th>Pris</th><th>Vinst/order</th><th></th></tr>
+    {% for p in items %}
+    <tr>
+      <td><a href="{{ url_for('product_page', pid=p.id) }}"><strong>{{ p.listing.titel or p.name }}</strong></a><br>
+        <span class="muted small">Sparad {{ p.created_at[:10] }}</span></td>
+      <td><span class="pill {{ 'ok' if p.status == 'publicerad' else ('acc' if p.status == 'utkast_klar' else '') }}">{{ status_labels.get(p.status, p.status) }}</span>
+        {% if p.error %}<span class="pill err">Fel</span>{% endif %}</td>
+      <td>{{ sek(p.purchase_price + p.shipping_cost) }}</td>
+      <td>{{ sek(p.kalkyl.price) }}</td>
+      <td>{{ sek(p.kalkyl.profit) }} <span class="pill {{ 'ok' if p.kalkyl.ok else 'warn' }}">{{ p.kalkyl.margin|pct }}</span></td>
+      <td><a class="btn small" href="{{ url_for('product_page', pid=p.id) }}">Öppna</a></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% else %}
+  <p class="empty">Inga produkter än. Kör en <a href="{{ url_for('trends_page') }}">trendanalys</a> och spara de produkter du gillar.</p>
+  {% endif %}
+</div>
+{% endblock %}
