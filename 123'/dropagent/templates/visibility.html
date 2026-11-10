@@ -2,7 +2,7 @@
 {% block title %}Synlighet{% endblock %}
 {% block content %}
 <h1>📣 Synlighet utan annonser</h1>
-<p class="muted">Agenterna gör dina produkter synliga i gratis kanaler: Google Shopping, Google-sök, AI-chattar, Instagram och Facebook.
+<p class="muted">Agenterna gör dina produkter synliga i gratis kanaler: Google Shopping, Google-sök, AI-chattar, Instagram, Facebook, TikTok och Pinterest. Du får färdiga inlägg och videor att dela med ett klick.
 {% if meta_connected %}Kopplad till {{ page_name }}{% if ig_user %} och Instagram @{{ ig_user }}{% endif %}.{% else %}<a href="{{ url_for('settings_page') }}#Sociala">Koppla Instagram/Facebook</a> så kan videor publiceras automatiskt.{% endif %}</p>
 
 {% if running %}<div class="flash info">En agent arbetar just nu. <a href="{{ url_for('job_page', job_id=running.id, back=url_for('visibility_page')) }}">Visa status →</a></div>{% endif %}
@@ -85,6 +85,32 @@
     </div>
   </div>
 
+  <!-- Färdiga inlägg -->
+  <div style="margin-top:14px">
+    <div class="spread">
+      <h3>✍️ Veckans färdiga inlägg{% if p.content.created_at and p.share %} <span class="muted small">({{ p.content.created_at[:10] }})</span>{% endif %}</h3>
+      <form method="post" action="{{ url_for('visibility_action', pid=p.id, action='innehall') }}"><button class="btn small {{ '' if p.share else 'primary' }}" data-busy="Startar…">{{ '↻ Skriv nya' if p.share else 'Skriv inlägg' }}</button></form>
+    </div>
+    {% if p.share %}
+    <div class="grid g3">
+      {% for key, s in p.share.items() %}
+      <div class="preview small">
+        <strong>{{ s.label }}</strong>
+        <div class="mail-body" style="margin:6px 0; white-space:pre-wrap">{{ s.text }}</div>
+        <div class="row">
+          <button type="button" class="btn small" onclick="copyText(this)">📋 Kopiera</button>
+          {% if s.share %}<a class="btn small ok" href="{{ s.share }}" target="_blank" rel="noopener">Dela på {{ s.label }} ↗</a>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="help">Kopiera texten och klistra in den i appen, eller klicka Dela. Till Instagram och TikTok: ladda ner en video nedan och använd texten som bildtext.
+      {% if not p.store_url %}Länken till produkten saknas än. Klicka <em>Publicera i alla kanaler</em> ovan så hämtas den.{% else %}Länkarna är märkta, så Shopify visar vilken kanal som ger besök och köp.{% endif %}</p>
+    {% else %}
+    <p class="small muted">Agenten skriver färdiga inlägg för Facebook, Instagram, TikTok och Pinterest med länk till produkten. Ca 0,3 kr.{% if cfg.claude %} Nya texter skrivs automatiskt varje vecka när autopiloten är på.{% endif %}</p>
+    {% endif %}
+  </div>
+
   {% if p.videos %}
   <div class="grid g3" style="margin-top:14px">
     {% for v in p.videos %}
@@ -123,8 +149,8 @@
 {% block scripts %}
 <script>
 function copyText(btn) {
-  const t = btn.previousElementSibling.innerText;
-  navigator.clipboard.writeText(t).then(() => { btn.textContent = '✓ Kopierat'; setTimeout(() => btn.textContent = '📋 Kopiera text', 1500); });
+  const t = btn.closest('.preview').querySelector('.mail-body').innerText;
+  navigator.clipboard.writeText(t).then(() => { btn.textContent = '✓ Kopierat'; setTimeout(() => btn.textContent = '📋 Kopiera', 1500); });
 }
 </script>
 {% endblock %}

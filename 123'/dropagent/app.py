@@ -6,7 +6,8 @@ import webbrowser
 
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
 
-from core import aliexpress, ai, autopilot, fulfill, marketing, portfolio, social, video, db, jobs, mail, money, products, settings, shopify, suppliers, support, trends
+from core import (aliexpress, ai, autopilot, db, fulfill, jobs, mail, marketing, money, portfolio, products, scheduler,
+                  settings, shopify, social, stock, suppliers, support, trends, video)
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
@@ -60,8 +61,36 @@ def home():
     activity = db.query("SELECT * FROM activity ORDER BY id DESC LIMIT 12")
     return render_template(
         "home.html", reports=reports, tickets=tickets, prod_counts={r["status"]: r["c"] for r in prods},
-        activity=activity, usage=ai.usage_summary(),
+        activity=activity, usage=ai.usage_summary(), auto=automation_status(),
     )
+
+
+def automation_status():
+    """Vad som sköts automatiskt just nu (visas på Översikt)."""
+    st = settings.status()
+    so = stock.overview()
+    on = lambda key: settings.get(key) == "1"
+    per_week = int(settings.get_float("videos_per_week", 0))
+    return [
+        {"name": "Lagerkoll", "on": so["enabled"] and so["ready"], "link": "Lager",
+         "text": (f"Var {settings.get_float('stock_check_hours', 6):.0f}:e timme. Senast {so['last_check'][:16] or 'aldrig'}."
+                  + (f" {len(so['hidden'])} dold(a) just nu." if so["hidden"] else ""))
+                 if so["ready"] else "Kräver att Shopify och AliExpress-kontot är kopplade."},
+        {"name": "Ordrar till AliExpress", "on": fulfill.mode() == "auto" and fulfill.ready(), "link": "Ordrar",
+         "text": settings.CHOICES["auto_order_mode"].get(fulfill.mode(), "")},
+        {"name": "Nya produkter", "on": on("autopilot_enabled") and st["claude"], "link": "Autopilot",
+         "text": ("Publiceras utan att fråga." if on("autopilot_auto_approve") else "Du godkänner varje förslag.")
+                 + f" Senast {settings.get('autopilot_last_run')[:16] or 'aldrig'}."},
+        {"name": "Sökoptimering", "on": on("seo_auto") and on("autopilot_enabled") and st["claude"], "link": "Sociala",
+         "text": "Nya produkter optimeras för Google och AI-sök."},
+        {"name": "Inläggstexter", "on": on("content_weekly") and on("autopilot_enabled") and st["claude"], "link": "Sociala",
+         "text": "Nya texter varje vecka på Synlighet-sidan."},
+        {"name": "Videor", "on": per_week > 0 and on("autopilot_enabled") and st["claude"], "link": "Sociala",
+         "text": (f"{per_week} per produkt och vecka. " + ("Publiceras automatiskt." if on("video_auto_publish") and social.connected()
+                  else "Du publicerar dem själv.")) if per_week else "Avstängt."},
+        {"name": "Kundtjänst", "on": st["gmail"] and settings.get_float("mail_check_minutes", 0) > 0, "link": "Gmail",
+         "text": settings.CHOICES["support_auto_mode"].get(settings.get("support_auto_mode"), "") if st["gmail"] else "Gmail är inte kopplat."},
+    ]
 
 
 # ---------------- Trender ----------------
@@ -229,6 +258,8 @@ def _float(name, default=0.0):
 @app.post("/produkter/<int:pid>/spara")
 def product_save(pid):
     p = products.get(pid)
+    if not p:
+        return redirect(url_for("products_page"))
     data = {
         "name": request.form.get("name", p["name"]).strip() or p["name"],
         "purchase_price": _float("purchase_price"),
@@ -479,7 +510,7 @@ def visibility_action(pid, action):
         if not settings.status()["claude"]:
             flash("Lägg in din Anthropic API-nyckel under Inställningar först.", "error")
             return redirect(back)
-        func = marketing.propose_seo if action == "sok" else marketing.content_plan
+        func = marketing.propose_seo if action == "sok" else marketing.kit
         job_id = jobs.start("synlighet", func, pid, result_url=lambda r: f"/synlighet#p{pid}")
         return _job_redirect(job_id, back)
     try:
@@ -500,6 +531,8 @@ def visibility_action(pid, action):
 @app.post("/video/<int:vid>/<action>")
 def video_action(vid, action):
     v = db.one("SELECT * FROM videos WHERE id = ?", (vid,))
+    if not v:
+        return redirect(url_for("visibility_page"))
     back = url_for("visibility_page") + f"#p{v['product_id']}"
     if action == "publicera":
         job_id = jobs.start("synlighet", lambda x, job_id=None: social.publish_video(x), vid, result_url=lambda r: back)
@@ -569,6 +602,15 @@ def portfolio_retire(rid):
     return redirect(url_for("autopilot_page"))
 
 
+@app.post("/lager/kolla")
+def stock_check():
+    if not stock.ready():
+        flash("Koppla Shopify och AliExpress-kontot under Inställningar först.", "error")
+        return redirect(url_for("autopilot_page"))
+    job_id = jobs.start("lager", stock.run, result_url=lambda r: "/autopilot")
+    return _job_redirect(job_id, url_for("autopilot_page"))
+
+
 @app.post("/portfolj/ta-bort/<int:pid>")
 def portfolio_remove(pid):
     portfolio.remove_from_portfolio(pid)
@@ -588,7 +630,7 @@ def autopilot_page():
         "övrigt": [c for c in cands if c["status"] in ("olönsam", "ingen_leverantör", "behöver_leverantör", "fel")],
         "klara": [c for c in cands if c["status"] in ("godkänd", "avfärdad", "manuell")][:30],
     }
-    return render_template("autopilot.html", groups=groups, pf=portfolio.overview(), state_labels=STATE_LABELS, labels=CAND_LABELS, running=jobs.running("autopilot"),
+    return render_template("autopilot.html", groups=groups, pf=portfolio.overview(), stock=stock.overview(), state_labels=STATE_LABELS, labels=CAND_LABELS, running=jobs.running("autopilot"),
                            today_cost=autopilot.today_cost_sek(), budget=settings.get_float("autopilot_daily_budget_sek", 25),
                            enabled=settings.get("autopilot_enabled") == "1", last_run=settings.get("autopilot_last_run"),
                            hour=settings.get("autopilot_hour"))
@@ -620,7 +662,11 @@ def autopilot_decide(cid):
         if action == "approve":
             res = autopilot.approve(cid, request.form.get("price") or None)
             where = ", ".join(res.get("channels") or []) or "webbshoppen"
-            flash(f"Produkten är publicerad i: {where}. Koppla den i DSers (Products → Mapping) med länken som visas.", "ok")
+            extra = ""
+            if settings.status()["claude"] and "1" in (settings.get("seo_auto"), settings.get("content_weekly")):
+                jobs.start("synlighet", marketing.boost, autopilot.get(cid)["product_id"])
+                extra = " Sökoptimering och inläggstexter görs nu i bakgrunden."
+            flash(f"Produkten är publicerad i: {where}.{extra}", "ok")
             for w in res.get("warnings") or []:
                 flash(w, "error")
         elif action == "reject":
@@ -710,9 +756,7 @@ def pct(v):
 def main():
     db.init()
     jobs.cleanup_stale()
-    jobs.start_mail_scheduler()
-    autopilot.start_scheduler()
-    fulfill.start_scheduler()
+    scheduler.start()
     url = f"http://127.0.0.1:{PORT}"
     print("\n  DropAgent körs! Öppna", url, "i webbläsaren.")
     print("  Stäng det här fönstret för att avsluta programmet.\n")

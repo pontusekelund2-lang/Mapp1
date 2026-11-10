@@ -29,8 +29,17 @@
       <h2 style="margin-bottom:2px">Portföljen: {{ pf.products|length }} av {{ pf.max }} produkter aktiva</h2>
       <p class="muted small">{% if pf.free > 0 %}{{ pf.free }} ledig(a) plats(er). Autopiloten tar fram nya förslag.{% else %}Standby: alla platser är fyllda. Autopiloten letar nytt först när en produkt tappar.{% endif %}</p>
     </div>
-    <form method="post" action="{{ url_for('portfolio_check') }}"><button class="btn small" data-busy="Hämtar…" {% if not cfg.shopify %}disabled{% endif %}>↻ Kolla försäljning nu</button></form>
+    <div class="row">
+      <form method="post" action="{{ url_for('stock_check') }}"><button class="btn small" data-busy="Startar…" {% if not stock.ready %}disabled title="Koppla Shopify och AliExpress-kontot först"{% endif %}>📦 Kolla lager nu</button></form>
+      <form method="post" action="{{ url_for('portfolio_check') }}"><button class="btn small" data-busy="Hämtar…" {% if not cfg.shopify %}disabled{% endif %}>↻ Kolla försäljning nu</button></form>
+    </div>
   </div>
+  <p class="small muted">📦 Lagerkoll mot AliExpress:
+    {% if not stock.ready %}inte igång (Shopify och AliExpress-kontot måste vara kopplade).
+    {% elif stock.enabled %}<span class="pill ok">På</span> senast {{ stock.last_check[:16] if stock.last_check else 'aldrig' }}. Produkter som är slut hos leverantören tas bort ur butiken automatiskt.
+    {% else %}<span class="pill warn">Av</span> <a href="{{ url_for('settings_page') }}#Lager">slå på</a>.{% endif %}
+    {% if stock.unwatched %}<br>Kan inte kollas (saknar AliExpress-koppling): {% for u in stock.unwatched %}<a href="{{ url_for('product_page', pid=u.id) }}">{{ u.name }}</a>{{ ', ' if not loop.last }}{% endfor %}.{% endif %}
+  </p>
   {% for r in pf.retirements %}
   <div class="note" style="margin:10px 0">
     <strong>Föreslaget byte: {{ r.name }}</strong>. {{ r.reason }}
@@ -42,13 +51,20 @@
   {% endfor %}
   {% if pf.products %}
   <div class="table-wrap"><table class="small" style="margin-top:8px">
-    <tr><th>Produkt</th><th>Aktiv sedan</th><th>Sålda 7 d</th><th>Veckan innan</th><th>Bästa vecka</th><th>Totalt</th><th>Läge</th><th></th></tr>
-    {% for p in pf.products %}{% set st = p.stats %}
+    <tr><th>Produkt</th><th>Aktiv sedan</th><th>Sålda 7 d</th><th>Veckan innan</th><th>Bästa vecka</th><th>Totalt</th><th>Läge</th><th>Lager hos leverantören</th><th></th></tr>
+    {% for p in pf.products %}{% set st = p.stats %}{% set sk = p.stock %}
     <tr>
       <td><a href="{{ url_for('product_page', pid=p.id) }}">{{ p.listing.titel or p.name }}</a></td>
       <td>{{ (p.active_since or p.created_at)[:10] }}</td>
       <td>{{ st.last7 if st else '–' }}</td><td>{{ st.prev7 if st else '–' }}</td><td>{{ st.peak7 if st else '–' }}</td><td>{{ st.total if st else '–' }}</td>
       <td>{% if st.state %}<span class="pill {{ state_labels[st.state][1] }}" title="{{ st.why }}">{{ state_labels[st.state][0] }}</span>{% else %}<span class="muted">Ej kollad</span>{% endif %}</td>
+      <td>{% if sk.hidden_at %}<span class="pill err" title="{{ sk.hidden_reason }}">Slut – dold sedan {{ sk.hidden_at[:10] }}</span>
+          {% elif sk.result == 'osäkert' %}<span class="pill warn" title="{{ sk.reason }}">{% if sk.seen %}Osäkert ({{ sk.fails }} av 3){% else %}Kan inte läsas – kolla kopplingen{% endif %}</span>
+          {% elif sk.checked_at %}<span class="pill ok">{{ sk.stock }} st</span>
+          {% elif not p.ae_product_id %}<span class="muted" title="Produkten saknar koppling till en AliExpress-variant">Kan inte kollas</span>
+          {% else %}<span class="muted">Ej kollad</span>{% endif %}
+          {% if sk.price_warning %}<br><span class="pill warn" title="{{ sk.price_warning }}">Dyrare inköp</span>{% endif %}
+          {% if sk.error %}<br><span class="pill err" title="{{ sk.error }}">Fel</span>{% endif %}</td>
       <td><form method="post" action="{{ url_for('portfolio_remove', pid=p.id) }}"><button class="btn small" data-confirm="Räkna inte produkten som aktiv (t.ex. en dubblett)? Inget ändras i Shopify.">Räkna inte</button></form></td>
     </tr>
     {% endfor %}
@@ -136,8 +152,7 @@
 {% endif %}
 
 {% if groups['övrigt'] %}
-<h2 style="margin-top:20px">Inte aktuella just nu</h2>
-<div class="card">
+<details class="card" style="margin-top:20px"><summary>Inte aktuella just nu ({{ groups['övrigt']|length }}): idéer utan bra leverantör, olönsamma eller med fel</summary>
   {% for c in groups['övrigt'] %}
   <div id="c{{ c.id }}" class="spread" style="border-bottom:1px solid var(--line); padding:10px 0">
     <div style="flex:1; min-width:260px">
@@ -157,7 +172,7 @@
     </div>
   </div>
   {% endfor %}
-</div>
+</details>
 {% endif %}
 
 {% if groups['klara'] %}
@@ -166,7 +181,7 @@
   <p class="small">{{ c.decided_at[:16] if c.decided_at else '' }} · <strong>{{ c.name }}</strong> <span class="pill {{ 'ok' if c.status == 'godkänd' else '' }}">{{ labels[c.status] }}</span>
   {% if c.status == 'godkänd' and c.product %}
     {% if c.product.shopify_admin_url %}<a href="{{ c.product.shopify_admin_url }}" target="_blank" rel="noopener">Shopify</a> · {% endif %}
-    Koppla i DSers: <code>{{ c.product.supplier_url }}</code>
+    Leverantör: <code>{{ c.product.supplier_url }}</code>
   {% elif c.product %}<a href="{{ url_for('product_page', pid=c.product.id) }}">Öppna produkt</a>{% endif %}
   </p>
   {% endfor %}

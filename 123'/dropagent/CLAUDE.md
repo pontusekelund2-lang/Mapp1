@@ -29,24 +29,36 @@ Svara användaren på svenska, enkelt och steg för steg.
   DS-metodnamn och svarsfält i `METHODS`/`details()`/`freight()` är skrivna efter dokumentationen men har inte
   provkörts med riktiga nycklar. Om "Testa" ger fel: läs AliExpress dokumentation och justera där. OAuth-token via
   `/rest/auth/token/create` (HMAC-SHA256) och callback `/aliexpress/callback`.
-- `core/autopilot.py`: autopiloten (scout → competitors → pick_supplier → decide_price → build_product → godkännandekö
-  `/autopilot`). Prisgolv i kod: `min_margin_percent` + `min_profit_sek`. Daglig körning via `start_scheduler()`.
-  Budgetspärr: `autopilot_daily_budget_sek`. `approve()` publicerar i webbshoppen och sedan i alla kanaler via
-  `marketing.publish_everywhere` (utom kassasystem). Misslyckas kanalerna blir det en varning, inte ett fel.
+- `core/autopilot.py`: autopiloten. `run(scout=...)` = `upkeep()` (dagligen: försäljningskoll, automatisk sökoptimering,
+  veckans inläggstexter, videor) + `find_products()` (scout → pick_supplier → competitors → decide_price → build_product
+  → godkännandekö `/autopilot`, eller direkt publicering om `autopilot_auto_approve`=1). Prisgolv i kod:
+  `min_margin_percent` + `min_profit_sek`. Budgetspärr: `autopilot_daily_budget_sek`. `approve()` publicerar i
+  webbshoppen och sedan i alla kanaler via `marketing.publish_everywhere` (utom kassasystem).
+- `core/scheduler.py`: ALL schemaläggning (en tråd, `tick()` var 30:e sekund): mejl, ordrar var 10:e minut, lagerkoll
+  var `stock_check_hours`:e timme, autopilotens underhåll dagligen från `autopilot_hour` och produktsökning var
+  `autopilot_interval_days`:e dag (`autopilot_plan()`). Lägg nya återkommande uppgifter här, inte i egna trådar.
+- `core/stock.py`: lageragenten. `run()` läser lagret för varje aktiv produkts exakta variant (ds.product.get, utan cache).
+  Säkert slut (lager < `stock_min_units` eller `product_status_type` != onSelling) → `stock_out_action`: dölj (DRAFT,
+  aktiveras igen vid lager ≥ `restore_units()`) eller radera. Osäkra svar (fel, inga varianter, varianten saknas) kräver
+  3 kontroller i rad och att API:t svarade för någon annan produkt. Läget sparas i `products.stock_json`. Dold i 7 dagar
+  → `retired_at` sätts så att autopiloten letar ersättare. `product_status_type` är taget ur dokumentationen och inte
+  sett i ett riktigt svar än.
 - `core/portfolio.py`: håller `portfolio_max_active` (3) produkter. `evaluate()` hämtar försäljning (Shopify orders),
   bedömer ny/vinnare/stabil/avtagande/död och skapar bytesförslag (tabell `retirements`). `free_slots()` styr hur många
   nya förslag autopiloten tar fram; 0 = standby.
 - `core/marketing.py`: synlighetsagenter (sida `/synlighet`): kanaler + `publish_everywhere`, sökoptimering
-  (`propose_seo` → `apply_seo`, sätter taxonomikategori och metafält mm-google-shopping.custom_product),
-  veckans innehållsplan (`content_plan`, auto via autopiloten om `content_weekly`=1) och annonskalkyl (`ad_check`).
-  Amazon/eBay hoppas över (förbjuder dropshipping från andra återförsäljare).
+  (`propose_seo` → `apply_seo`, eller `auto_seo` utan klick om `seo_auto`=1; sätter taxonomikategori och metafält
+  mm-google-shopping.custom_product), veckans färdiga inlägg (`kit` → `content_json`, `share_links` bygger texter med
+  utm-märkta länkar och delningslänkar till Facebook/Pinterest; auto varje vecka om `content_weekly`=1), `boost` körs
+  i bakgrunden efter ett godkännande, och annonskalkyl (`ad_check`). Produktens publika adress sparas i
+  `products.store_url` av `live_product`. Amazon/eBay hoppas över (förbjuder dropshipping från andra återförsäljare).
 - `core/video.py`: videoagent. Pillow ritar 5 bilder (hook, 3 fördelar, pris/CTA) i 1080x1920, ffmpeg (imageio-ffmpeg)
   gör zoompan-bildspel ~15 s med tyst ljudspår. Tabell `videos`. Användaren vill INTE filma själv.
 - `core/social.py`: Meta Graph API. `connect()` byter Explorer-token mot sidtoken + IG-id. Instagram Reels via
   resumable upload (rupload.facebook.com), Facebook via graph-video /{page}/videos. TikTok/YouTube stöds ej (kräver
   granskade appar). Veckovisa videor körs i `autopilot.run()` (`videos_per_week`, `video_auto_publish`).
   Produktsökningen i autopiloten är pausad tills AliExpress API är inlagt.
-- `core/fulfill.py`: orderagenten. Hämtar betalda, ej skickade Shopify-ordrar (var 10:e minut + knapp på /ordrar),
+- `core/fulfill.py`: orderagenten. Hämtar betalda, ej skickade Shopify-ordrar (var 10:e minut via scheduler + knapp på /ordrar),
   lägger dem hos AliExpress via `aliexpress.ds.order.create` ("Create and Pay", `try_to_pay`) och för tillbaka
   spårning från `aliexpress.trade.ds.order.get` till Shopify (`shopify.add_tracking`, kräver scopes
   read_/write_merchant_managed_fulfillment_orders – saknas än). Läge `auto_order_mode`: av / godkann (standard) / auto.
@@ -57,10 +69,16 @@ Svara användaren på svenska, enkelt och steg för steg.
   (ett test-anrop till trade.ds.order.get gav "Insufficient permission", troligen pga påhittat order-id).
 - `core/jobs.py`: bakgrundstrådar för långa AI-jobb. OBS: kod i jobb körs utanför Flask app context,
   så använd inte `url_for` i `result_url`-lambdas (använd vanliga strängar som `f"/trender/{id}"`).
-- `templates/`, `static/`: UI. Hjälpsidan är `LAS_MIG.html` (serveras på `/hjalp`).
+- `templates/`, `static/`: UI. Hjälpsidan är `LAS_MIG.html` (serveras på `/hjalp`). Översikt visar vad som sköts
+  automatiskt (`automation_status()` i `app.py`).
+- `tests/`: `python -m unittest discover -s tests` (mockad AliExpress/Shopify, egen tom databas via DROPAGENT_DATA).
+- `autostart.bat`: lägger en genväg i Windows Autostart (inte provkörd på Windows än).
+- `data/` får aldrig checkas in (API-nycklar ligger i databasen). Den står i `.gitignore` i repots rot.
 
 ## Principer
-- Agenten gör inget utåtriktat (mejl, återbetalning, publicering) utan att användaren klickar Godkänn.
+- Användaren vill ha så mycket som möjligt automatiskt (2026-11-10). Allt automatiskt styrs av en inställning och
+  syns på Översikt. Mejl till kunder, återbetalningar och publicering av nya produkter kräver fortfarande Godkänn
+  om inte användaren själv slagit på motsvarande inställning.
 - AliExpress blockerar automatisk läsning av sidor. Använd söklänkar och skärmbilder, inte skrapning.
   Temu stöds inte (förbjuder vidareförsäljning).
 - Hitta aldrig på länkar, priser eller fakta i AI-prompter; be modellen markera osäkerhet.
@@ -104,4 +122,5 @@ Svara användaren på svenska, enkelt och steg för steg.
 - Kör autopiloten och följ upp: om korta sökfraser fortfarande ger fel produkter, bygg en idékälla som utgår från
   AliExpress egna bästsäljarflöden (DS feed-API) och jämför sedan med svenska priser.
 - Daglig omprissättning av godkända produkter.
+- Byta till reservleverantören automatiskt när huvudleverantören är slut (i dag döljs produkten).
 - Testa ändringar med användarens riktiga data via /aliexpress/diagnos innan dyra AI-körningar.

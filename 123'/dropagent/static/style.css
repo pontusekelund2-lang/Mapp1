@@ -95,7 +95,7 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: v
 .kv dd { margin: 0; font-weight: 600; }
 .sources a { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
-.mail-body { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 14px; max-height: 320px; overflow: auto; }
+.mail-body { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 14px; max-height: 320px; overflow: auto; }
 .preview { border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: var(--bg); }
 .thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
 .thumbs img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }

@@ -103,6 +103,7 @@ def _call_once(method, params, use_token=False, cache=True):
         "format": "json",
     }
     if use_token:
+        refresh_token_if_needed()  # även ordrar och lagerkoll måste hålla kopplingen vid liv, inte bara sökningen
         token = settings.get("aliexpress_access_token").strip()
         if not token:
             raise AliExpressError("AliExpress-kontot är inte kopplat. Klicka 'Koppla AliExpress-konto' under Inställningar.")
@@ -186,10 +187,15 @@ def create_token(code):
     _save_token(_rest("/auth/token/create", {"code": code.strip()}))
 
 
+_refresh_tried = 0.0
+
+
 def refresh_token_if_needed():
+    global _refresh_tried
     exp = settings.get_float("aliexpress_token_expires", 0)
     rt = settings.get("aliexpress_refresh_token").strip()
-    if rt and exp and exp / 1000 - time.time() < 3 * 24 * 3600:
+    if rt and exp and exp / 1000 - time.time() < 3 * 24 * 3600 and time.time() - _refresh_tried > 3600:
+        _refresh_tried = time.time()  # högst ett försök i timmen, så att ett fel inte upprepas vid varje anrop
         try:
             _save_token(_rest("/auth/token/refresh", {"refresh_token": rt}))
         except AliExpressError as e:
@@ -325,7 +331,6 @@ def search(keywords, limit=20, sort_by_sales=False):
     items = []
     if has_token():
         try:
-            refresh_token_if_needed()
             # Ange INTE sortBy: "orders,desc" ger samma orelaterade bästsäljare oavsett sökord (testat 2026-11-08).
             # Utan sortBy sorterar AliExpress på relevans. NGSELECTION_SEARCH_ERROR är tillfälligt och görs om i call().
             for page in (1, 2):  # 2 sidor à 20 (beprövade värden)

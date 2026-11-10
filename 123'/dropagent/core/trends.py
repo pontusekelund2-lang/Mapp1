@@ -1,7 +1,6 @@
 """Trendagenten: hittar populära produkter och bedömer dem."""
 import json
 from datetime import date
-from urllib.parse import quote_plus
 
 from . import ai, db, money, settings
 

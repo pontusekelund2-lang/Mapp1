@@ -13,7 +13,7 @@ import tempfile
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from . import ai, db, products, settings, suppliers
+from . import ai, db, products, suppliers
 
 W, H = 1080, 1920
 SLIDE_SECONDS = 3

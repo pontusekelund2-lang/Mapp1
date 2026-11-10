@@ -44,8 +44,16 @@ FIELDS = {
     "auto_order_daily_max": ("5", "Max automatiska ordrar per dag", "number", "Skydd mot bedrägeri och fel. Fler ordrar väntar på ditt klick."),
     "auto_order_try_pay": ("1", "Betala AliExpress-ordern direkt", "bool", "På = AliExpress försöker dra pengarna med betalsättet som är sparat i ditt AliExpress-konto. Av = ordern väntar på betalning i AliExpress."),
     "auto_order_phone": ("", "Telefonnummer till leverantören (valfritt)", "text", "Används om kunden inte angett telefon. T.ex. 0701234567."),
+    # Lager
+    "stock_auto": ("1", "Kolla lagret hos AliExpress automatiskt", "bool", "På = DropAgent kollar lagret för varje produkt och tar bort den ur butiken när den är slut hos leverantören."),
+    "stock_out_action": ("dolj", "När en produkt är slut hos leverantören", "choice", "Dölj = kunder kan inte köpa den, och den kommer tillbaka av sig själv när lagret är påfyllt. Radera går inte att ångra."),
+    "stock_min_units": ("3", "Räkna som slut när leverantören har färre än (st)", "number", "En liten marginal, så att ingen hinner köpa det sista exemplaret."),
+    "stock_check_hours": ("6", "Timmar mellan lagerkollarna", "number", "6 = fyra gånger per dygn. Kostar inget (ingen AI används)."),
     # Autopilot
-    "autopilot_enabled": ("0", "Kör autopiloten automatiskt varje dag", "bool", "När den är på letar agenterna nya produkter varje dag när DropAgent är igång."),
+    "autopilot_auto_approve": ("0", "Publicera nya produkter utan att fråga", "bool", "Av = du klickar Godkänn på varje förslag (rekommenderas). På = autopiloten publicerar lönsamma förslag direkt."),
+    "seo_auto": ("1", "Sökoptimera nya produkter automatiskt", "bool", "Titel, Google-texter, kategori och vanliga frågor skrivs och läggs in i Shopify utan att du behöver klicka. Ca 1–2 kr per produkt."),
+    "content_weekly": ("1", "Skriv nya inläggstexter varje vecka", "bool", "Färdiga texter för Facebook, Instagram, TikTok och Pinterest till varje produkt, på Synlighet-sidan. Ca 0,3 kr per produkt och vecka."),
+    "autopilot_enabled": ("0", "Kör autopiloten automatiskt", "bool", "På = varje dag sköts försäljningskoll, texter och videor. Nya produkter letas enligt 'Dagar mellan körningarna'. Gäller när DropAgent är igång."),
     "autopilot_hour": ("7", "Klockslag för körning (0–23)", "number", ""),
     "supplier_min_stock": ("50", "Minsta lager hos leverantören (st per variant)", "number", "Annonser med mindre lager för varianten vi säljer väljs bort."),
     "autopilot_burst_until": ("", "Kör varje dag till och med (datum, valfritt)", "text", "T.ex. 2026-11-12. Fram till dess körs autopiloten dagligen, sedan enligt 'Dagar mellan körningarna'."),
@@ -83,6 +91,10 @@ CHOICES = {
         "godkann": "Jag klickar Beställ på varje order i DropAgent",
         "auto": "Automatiskt – DropAgent beställer direkt (med spärrar)",
     },
+    "stock_out_action": {
+        "dolj": "Dölj i butiken (kommer tillbaka automatiskt när lagret är påfyllt)",
+        "radera": "Radera från Shopify helt (går inte att ångra)",
+    },
     "support_auto_mode": {
         "av": "Av – jag godkänner allt",
         "svar": "Svara automatiskt på enkla frågor (leverans, produkt, returinstruktioner)",
@@ -97,8 +109,9 @@ GROUPS = [
     ("Butik och policy", ["store_name", "shipping_time", "return_policy", "return_address", "store_email_signature"]),
     ("AliExpress", ["aliexpress_app_key", "aliexpress_app_secret", "aliexpress_tracking_id", "aliexpress_callback_url"]),
     ("Ordrar hos AliExpress", ["auto_order_mode", "auto_order_try_pay", "auto_order_max_sek", "auto_order_daily_max", "auto_order_phone"]),
-    ("Sociala medier", ["meta_app_id", "meta_app_secret", "meta_graph_version", "video_auto_publish", "videos_per_week"]),
-    ("Autopilot", ["autopilot_enabled", "autopilot_hour", "autopilot_interval_days", "autopilot_burst_until", "supplier_min_stock", "autopilot_max_candidates", "autopilot_daily_budget_sek", "autopilot_focus", "min_profit_sek", "import_buffer_percent",
+    ("Lager (slut hos leverantören)", ["stock_auto", "stock_out_action", "stock_min_units", "stock_check_hours"]),
+    ("Sociala medier", ["content_weekly", "seo_auto", "video_auto_publish", "videos_per_week", "meta_app_id", "meta_app_secret", "meta_graph_version"]),
+    ("Autopilot", ["autopilot_enabled", "autopilot_auto_approve", "autopilot_hour", "autopilot_interval_days", "autopilot_burst_until", "supplier_min_stock", "autopilot_max_candidates", "autopilot_daily_budget_sek", "autopilot_focus", "min_profit_sek", "import_buffer_percent",
                    "portfolio_max_active", "portfolio_grace_days", "portfolio_min_weekly_sales", "portfolio_decline_percent"]),
     ("Ekonomi", ["vat_percent", "payment_fee_percent", "usd_to_sek", "min_margin_percent"]),
 ]

@@ -1,0 +1,7 @@
+# Hemligt och lokalt: API-nycklar, databas, videor och uppladdade bilder får aldrig hamna på GitHub
+data/
+.env
+# Python
+__pycache__/
+*.pyc
+.venv/

@@ -4,7 +4,7 @@
 <h1>Hej! 👋</h1>
 <p class="muted">Här ser du läget i din butik och vad som väntar på dig.</p>
 
-{% if not (cfg.claude and cfg.shopify and cfg.gmail) %}
+{% if not (cfg.claude and cfg.shopify) %}
 <div class="card">
   <h2>Kom igång</h2>
   <ol class="checklist">
@@ -22,6 +22,19 @@
   <div class="stat"><div class="num">{{ prod_counts.get('sparad', 0) + prod_counts.get('utkast_klar', 0) }}</div><div class="lbl">Produkter på gång</div></div>
   <div class="stat"><div class="num">{{ prod_counts.get('publicerad', 0) }}</div><div class="lbl">Produkter i Shopify</div></div>
   <div class="stat"><div class="num">{{ sek(usage.month_sek) }}</div><div class="lbl">AI-kostnad denna månad (uppskattad)</div></div>
+</div>
+
+<div class="card">
+  <div class="spread"><h2>Det här sköts automatiskt</h2><a class="btn small" href="{{ url_for('settings_page') }}">Ändra →</a></div>
+  <div class="grid g4">
+    {% for a in auto %}
+    <div class="small">
+      <strong>{{ a.name }}</strong> {% if a.on %}<span class="pill ok">På</span>{% else %}<span class="pill warn">Av</span>{% endif %}<br>
+      <span class="muted">{{ a.text }}</span> <a href="{{ url_for('settings_page') }}#{{ a.link }}">Ändra</a>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="help" style="margin-top:10px">Automatiken arbetar bara medan DropAgent är igång på datorn. Låt det svarta fönstret vara öppet.</p>
 </div>
 
 <div class="grid g2">

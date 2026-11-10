@@ -392,6 +392,32 @@ def set_status(product_gid, status):
     _user_errors(d["productUpdate"])
 
 
+def delete_product(product_gid):
+    """Raderar produkten helt ur Shopify. Går inte att ångra."""
+    d = graphql(
+        """mutation del($input: ProductDeleteInput!) {
+          productDelete(input: $input) { deletedProductId userErrors { field message } }
+        }""",
+        {"input": {"id": product_gid}},
+    )
+    _user_errors(d["productDelete"])
+
+
+def store_url(product):
+    """Adressen kunderna ser för en produkt (från get_product). Tom sträng om den inte går att ta reda på."""
+    if not product:
+        return ""
+    if product.get("onlineStoreUrl"):
+        return product["onlineStoreUrl"]
+    if not product.get("handle"):
+        return ""
+    try:
+        base = graphql("{ shop { primaryDomain { url } } }")["shop"]["primaryDomain"]["url"]
+    except (ShopifyError, KeyError, TypeError):
+        return ""
+    return f"{base.rstrip('/')}/products/{product['handle']}"
+
+
 def product_sales(days=60):
     """Antal sålda per produkt och dag de senaste `days` dagarna: {product_gid: {"YYYY-MM-DD": antal}} och titlar."""
     from datetime import date, timedelta
@@ -427,7 +453,7 @@ def product_sales(days=60):
 def get_product(product_gid):
     """Aktuell titel, text, typ och taggar från Shopify. None om produkten inte finns."""
     d = graphql(
-        "query($id: ID!) { product(id: $id) { id title descriptionHtml productType tags status } }",
+        "query($id: ID!) { product(id: $id) { id title handle onlineStoreUrl descriptionHtml productType tags status } }",
         {"id": product_gid},
     )
     return d.get("product")
@@ -441,19 +467,18 @@ def _words(t):
 def find_product_by_title(title):
     """Letar upp en produkt på namn. Shopifys sökning klarar inte alltid tecken som – och &, så om den inte
     ger träff jämförs namnen på de senaste produkterna ord för ord."""
-    import re
     words = _words(title)
     q = " ".join(sorted(words, key=len, reverse=True)[:4])
     nodes = []
     if q:
         try:
-            d = graphql("query($q: String) { products(first: 10, query: $q) { nodes { id title descriptionHtml productType tags status } } }",
+            d = graphql("query($q: String) { products(first: 10, query: $q) { nodes { id title handle onlineStoreUrl descriptionHtml productType tags status } } }",
                         {"q": q})
             nodes = d["products"]["nodes"]
         except ShopifyError:
             nodes = []
     if not nodes:
-        d = graphql("{ products(first: 100, sortKey: UPDATED_AT, reverse: true) { nodes { id title descriptionHtml productType tags status } } }")
+        d = graphql("{ products(first: 100, sortKey: UPDATED_AT, reverse: true) { nodes { id title handle onlineStoreUrl descriptionHtml productType tags status } } }")
         nodes = d["products"]["nodes"]
 
     def score(n):

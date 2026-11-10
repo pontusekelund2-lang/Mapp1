@@ -4,13 +4,14 @@
                      (Webbshop, Google & YouTube, Facebook & Instagram, TikTok, Shop).
 2. Sökagent        – optimerar titel, SEO, kategori och Google-fält så att produkten hittas i
                      Google Shopping, Google-sök och AI-chattar. Förslag → du godkänner → ändras i Shopify.
-3. Innehållsagent  – skriver veckans videomanus, texter och hashtags för TikTok/Instagram/Facebook.
+3. Inläggsagent    – skriver varje vecka färdiga inlägg för Facebook, Instagram, TikTok och Pinterest,
+                     med spårade länkar och delningsknappar (ingen filmning behövs).
 4. Annonskalkyl    – räknar ut om betalda annonser kan löna sig, och avråder när det blir för dyrt.
 """
 import json
 from datetime import date
 
-from . import ai, db, money, products, settings, shopify
+from . import ai, db, products, settings, shopify
 
 CHANNEL_APPS = {
     "google": ("Google & YouTube", "https://apps.shopify.com/google", "Gratis produktannonser i Google Shopping och Google-sök."),
@@ -56,7 +57,11 @@ def live_product(pid):
     # håll DropAgents kopia i takt med Shopify
     l = p["listing"]
     l.update(titel=live["title"], beskrivning_html=live["descriptionHtml"], produkttyp=live["productType"], taggar=live["tags"])
-    db.update("products", pid, {"listing_json": json.dumps(l, ensure_ascii=False)})
+    fields = {"listing_json": json.dumps(l, ensure_ascii=False)}
+    url = shopify.store_url(live)
+    if url:
+        fields["store_url"] = url  # adressen kunderna ser, används i delningslänkarna
+    db.update("products", pid, fields)
     return products.get(pid), live
 
 
@@ -204,53 +209,100 @@ def apply_seo(pid):
     return cat_name
 
 
-# ---------- 3. Innehåll till sociala medier ----------
+# ---------- 3. Färdiga inlägg att dela (marknadsföringspaket) ----------
 
-CONTENT_SCHEMA = {
+KIT_SCHEMA = {
     "type": "object",
     "properties": {
-        "inlagg": {"type": "array", "items": {
-            "type": "object",
-            "properties": {
-                "dag": {"type": "string", "description": "Veckodag"},
-                "plattform": {"type": "string", "enum": ["TikTok", "Instagram Reels", "Facebook", "TikTok + Reels"]},
-                "ide": {"type": "string", "description": "Idén i en mening"},
-                "hook": {"type": "string", "description": "Text i bild de första 2 sekunderna"},
-                "manus": {"type": "array", "items": {"type": "string"}, "description": "Klipp för klipp: vad som filmas"},
-                "text_i_bild": {"type": "array", "items": {"type": "string"}},
-                "caption": {"type": "string"},
-                "hashtags": {"type": "string"},
-                "tid": {"type": "string", "description": "Bästa tid att lägga upp"},
-            },
-            "required": ["dag", "plattform", "ide", "hook", "manus", "text_i_bild", "caption", "hashtags", "tid"],
-            "additionalProperties": False,
-        }},
-        "tips": {"type": "string"},
+        "facebook": {"type": "string", "description": "Inlägg till Facebook-sidan eller grupper: 2–4 meningar, personlig ton, slutar med en uppmaning. Ingen länk (läggs till automatiskt)."},
+        "instagram": {"type": "string", "description": "Bildtext till Instagram: 1–3 korta stycken. Ingen länk och inga hashtags."},
+        "tiktok": {"type": "string", "description": "Text till en TikTok-video, max 150 tecken. Inga hashtags."},
+        "pinterest_titel": {"type": "string", "description": "Titel till en pin, max 90 tecken, med det ord folk söker på"},
+        "pinterest_text": {"type": "string", "description": "Beskrivning till pinnen, 1–2 meningar med sökord"},
+        "kort": {"type": "string", "description": "En enda rad (max 80 tecken) till story, sms eller annonsrubrik"},
+        "hashtags": {"type": "string", "description": "8–12 svenska och engelska hashtags, åtskilda med mellanslag"},
     },
-    "required": ["inlagg", "tips"],
+    "required": ["facebook", "instagram", "tiktok", "pinterest_titel", "pinterest_text", "kort", "hashtags"],
     "additionalProperties": False,
 }
 
 
-def content_plan(pid, job_id=None):
+def kit(pid, job_id=None):
+    """Skriver veckans färdiga inlägg för alla kanaler. Användaren kopierar eller delar med ett klick på Synlighet-sidan."""
+    if job_id:
+        db.update("jobs", job_id, {"message": "Skriver inlägg för Facebook, Instagram, TikTok och Pinterest…"})
     p = products.get(pid)
+    if settings.status()["shopify"] and p["shopify_id"]:
+        try:
+            p, _ = live_product(pid)  # aktuell titel och text, och adressen till produkten i butiken
+        except Exception as e:
+            db.log(f"Kunde inte hämta '{p['name']}' från Shopify, använder sparad text: {e}", "warning")
     l = p["listing"]
-    today = date.today()
-    result = ai.structured("innehållsplan", "Du är en svensk TikTok- och Instagram-kreatör som gör enkla videor som säljer. Svara på svenska.", f"""Gör en innehållsplan för veckan som börjar {today.isoformat()} för produkten nedan.
-Butiken har ingen annonsbudget, så allt ska vara organiskt (gratis) och gå att filma med en mobil och ett provexemplar.
+    earlier = (db.loads(p.get("content_json"), {}) or {}).get("facebook", "")
+    result = ai.structured("inläggstexter", "Du skriver korta inlägg på svenska för sociala medier åt en liten webbutik. "
+                           "Du hittar aldrig på fakta, priser, betyg eller erbjudanden.", f"""Skriv veckans inlägg för produkten nedan. Dagens datum: {date.today().isoformat()}.
 
+Butik: {settings.get('store_name')}
 Produkt: {l.get('titel') or p['name']}
-Pris: {l.get('pris_sek')} kr, fri frakt
+Pris: {l.get('pris_sek')} kr, fri frakt i Sverige, leverans {settings.get('shipping_time')}
 Beskrivning: {_strip_faq(l.get('beskrivning_html', ''))[:2500]}
-Målgrupp och idé: {json.dumps({k: p['trend'].get(k) for k in ('malgrupp', 'marknadsforingside', 'varfor_trendar')}, ensure_ascii=False)}
-Butikens adress: {settings.get('shopify_domain')}
+Målgrupp: {(p['trend'] or {}).get('malgrupp', '')}
+Förra veckans Facebook-inlägg (välj en annan vinkel): {earlier[:400] or 'inget'}
 
-Gör 5 inlägg med olika vinklar (t.ex. problem→lösning, före/efter, unboxing, "3 skäl", present/säsong, svar på vanlig fråga).
-Använd inga andras videor, ljud som kräver licens eller påståenden som inte står i beskrivningen. Nämn säsong
-om det passar (datum ovan).""", CONTENT_SCHEMA, effort="medium", max_tokens=12000)
+Regler: påstå bara det som står i beskrivningen. Inga påhittade rabatter, "bara i dag", recensioner eller
+jämförpriser. Nämn inte AliExpress, Kina eller dropshipping. Nämn säsong eller högtid om det passar datumet.
+Skriv inga länkar, de läggs till automatiskt.""", KIT_SCHEMA, effort="low", max_tokens=4000)
     result["created_at"] = db.now()
     db.update("products", pid, {"content_json": json.dumps(result, ensure_ascii=False)})
-    db.log(f"Veckans innehållsplan klar för '{p['name']}'.")
+    db.log(f"Veckans inlägg klara för '{p['name']}'.")
+    return pid
+
+
+def share_links(p):
+    """Färdiga texter med spårad länk (utm) och delningslänkar. Shopify visar sedan vilken kanal som säljer."""
+    from urllib.parse import quote
+    c = p.get("content") or {}
+    base = p.get("store_url") or ""
+    if not c.get("facebook"):
+        return {}
+
+    def link(source):
+        return f"{base}{'&' if '?' in base else '?'}utm_source={source}&utm_medium=social&utm_campaign=dropagent" if base else ""
+
+    tags = c.get("hashtags", "")
+    out = {
+        "facebook": {"label": "Facebook", "text": "\n\n".join(filter(None, [c["facebook"], link("facebook")])),
+                     "share": f"https://www.facebook.com/sharer/sharer.php?u={quote(link('facebook'), safe='')}" if base else ""},
+        "instagram": {"label": "Instagram", "text": "\n\n".join(filter(None, [c["instagram"], "Länk i bio.", tags])), "share": ""},
+        "tiktok": {"label": "TikTok", "text": " ".join(filter(None, [c["tiktok"], tags])), "share": ""},
+        "pinterest": {"label": "Pinterest", "text": "\n\n".join(filter(None, [c["pinterest_titel"], c["pinterest_text"], link("pinterest")])),
+                      "share": ("https://www.pinterest.com/pin/create/button/?url=" + quote(link("pinterest"), safe="")
+                                + "&media=" + quote((p.get("images") or [""])[0], safe="")
+                                + "&description=" + quote(c["pinterest_titel"] + ". " + c["pinterest_text"], safe="")) if base and p.get("images") else ""},
+        "kort": {"label": "Story / sms", "text": " ".join(filter(None, [c["kort"], link("story")])), "share": ""},
+    }
+    return out
+
+
+def auto_seo(pid, job_id=None):
+    """Sökoptimering utan klick: tar fram förslaget och lägger in det i Shopify direkt."""
+    propose_seo(pid, job_id=job_id)
+    apply_seo(pid)
+    return pid
+
+
+def boost(pid, job_id=None):
+    """Körs i bakgrunden direkt efter att en produkt godkänts: sökoptimering och veckans inlägg, enligt inställningarna."""
+    p = products.get(pid)
+    for on, what, func in ((settings.get("seo_auto") == "1" and not (db.loads(p.get("seo_json"), {}) or {}).get("status"),
+                            "Sökoptimeringen", auto_seo),
+                           (settings.get("content_weekly") == "1", "Inläggstexterna", kit)):
+        if not on:
+            continue
+        try:
+            func(pid, job_id=job_id)
+        except Exception as e:
+            db.log(f"{what} av '{p['name']}' misslyckades: {e}", "warning")
     return pid
 
 
@@ -285,6 +337,7 @@ def overview():
         p = products.get(r["id"])
         p["seo"] = db.loads(p.get("seo_json"), {}) or {}
         p["content"] = db.loads(p.get("content_json"), {}) or {}
+        p["share"] = share_links(p)
         p["ads"] = ad_check(p["id"])
         items.append(p)
     return items
@@ -296,6 +349,10 @@ def weekly_content_due():
     due = []
     for p in overview():
         c = p["content"]
-        if not c or date.fromisoformat(c["created_at"][:10]).isocalendar()[:2] != week:
+        try:
+            fresh = bool(c.get("facebook")) and date.fromisoformat(c["created_at"][:10]).isocalendar()[:2] == week
+        except (KeyError, ValueError):
+            fresh = False
+        if not fresh:  # saknas, är från en tidigare vecka eller är i det gamla formatet (filmmanus)
             due.append(p["id"])
     return due

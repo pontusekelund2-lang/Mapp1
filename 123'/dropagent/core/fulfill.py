@@ -15,8 +15,6 @@ får Shopify-ordernumret som out_order_id (AliExpress svarar REPEATED_ORDER_ERRO
 """
 import json
 import re
-import threading
-import time
 
 from . import aliexpress, db, settings, shopify
 
@@ -261,18 +259,3 @@ def track():
 def overview():
     rows = [get(r["id"]) for r in db.query("SELECT id FROM ae_orders ORDER BY id DESC LIMIT 50")]
     return {r["shopify_id"]: r for r in rows}
-
-
-# ---------- schemaläggning ----------
-
-def start_scheduler(minutes=10):
-    def loop():
-        while True:
-            time.sleep(60 * minutes)
-            try:
-                if mode() != "av" and ready():
-                    sync()
-            except Exception as e:
-                db.log(f"Orderagenten: {e}", "error")
-
-    threading.Thread(target=loop, daemon=True).start()

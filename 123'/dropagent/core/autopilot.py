@@ -3,9 +3,7 @@ sätter ett pris under svenska konkurrenter och förbereder en färdig produkt. 
 import json
 import math
 import re
-import threading
 import time
-from datetime import datetime
 from urllib.parse import urlparse
 
 from . import ai, aliexpress, db, money, products, settings, trends
@@ -75,6 +73,24 @@ def known_names():
     return names
 
 
+def _name_words(name):
+    return {w for w in re.findall(r"[a-zåäö0-9]+", name.lower()) if len(w) > 3}
+
+
+def is_duplicate(name, known):
+    """Samma namn, eller nästan samma ord i annan ordning (t.ex. 'Laptopställ hopfällbart' och 'Hopfällbart laptopställ').
+    Liknande produkter med helt andra ord sorteras bort av trendagenten, som får listan över butikens produkter."""
+    if name.strip().lower() in known:
+        return True
+    words = _name_words(name)
+    for other in known:
+        o = _name_words(other)
+        common = len(words & o)
+        if common >= 2 and common / min(len(words), len(o)) >= 0.6:
+            return True
+    return False
+
+
 # ---------- Steg 1: trendspanare ----------
 
 def scout(job_id=None, n=None):
@@ -84,13 +100,17 @@ def scout(job_id=None, n=None):
     full_focus = ("Produkter som andra butiker redan marknadsför hårt just nu (virala på TikTok, många annonser, "
                   "Instagram/Facebook-reklam) och som säljs av flera svenska eller nordiska webbutiker, så att det finns "
                   "efterfrågan och prisjämförelse. " + (f"Användarens fokus: {focus}." if focus else ""))
+    have = [r["name"] for r in db.query("SELECT name FROM products WHERE status = 'publicerad' AND COALESCE(retired_at,'') = ''")]
+    if have:
+        full_focus += " Butiken säljer redan följande, föreslå inte samma eller mycket lika produkter: " + "; ".join(have) + "."
     report_id = trends.run_trend_research(full_focus, n + 4, job_id=job_id)
     report = trends.get_report(report_id)
     seen = known_names()
     new = []
     for p in report["products"]:
-        if p["namn"].strip().lower() in seen or p.get("totalbetyg", 0) < 45:
+        if is_duplicate(p["namn"], seen) or p.get("totalbetyg", 0) < 45:
             continue
+        seen.add(p["namn"].strip().lower())
         cid = db.insert("candidates", {"created_at": db.now(), "name": p["namn"], "status": "ny",
                                        "trend_json": json.dumps(p, ensure_ascii=False)})
         new.append(cid)
@@ -409,55 +429,81 @@ def process(cid, job_id=None):
         db.log(f"Autopiloten: fel för {c['name']}: {e}", "error")
 
 
-def run(job_id=None):
-    """En körning: kolla portföljen, och om det finns lediga platser, ta fram nya färdiga produktförslag."""
-    from . import portfolio
+def upkeep(job_id=None, sales=True):
+    """Det dagliga underhållet av produkterna som redan finns i butiken: försäljningskoll, sökoptimering,
+    veckans inläggstexter och videor. Stannar när dagens AI-budget är nådd."""
+    from . import marketing, portfolio, social, stock, video
+    from datetime import date, timedelta
 
     def progress(t):
         if job_id:
             db.update("jobs", job_id, {"message": t})
 
-    started = time.time()
-    settings.set("autopilot_last_run", db.now())
-    if settings.status()["shopify"]:
+    if not settings.status()["shopify"]:
+        return
+    if sales:
         progress("Kollar hur produkterna i butiken säljer…")
         try:
             portfolio.evaluate()
         except Exception as e:
             db.log(f"Kunde inte hämta försäljning från Shopify: {e}", "warning")
+    items = [p for p in marketing.overview() if not stock.is_hidden(p)]  # ingen reklam för produkter som är slut
+    texts_due = set(marketing.weekly_content_due()) if settings.get("content_weekly") == "1" else set()
     per_week = int(settings.get_float("videos_per_week", 2))
-    if per_week > 0:
-        from . import marketing, social, video
-        from datetime import date, timedelta
-        monday = (date.today() - timedelta(days=date.today().weekday())).isoformat()
-        for p in marketing.overview():
-            made = db.one("SELECT COUNT(*) c FROM videos WHERE product_id = ? AND created_at >= ?", (p["id"], monday))["c"]
-            # sprid videorna över veckan: högst en ny video per produkt och dag
-            today_made = db.one("SELECT COUNT(*) c FROM videos WHERE product_id = ? AND created_at >= ?", (p["id"], db.now()[:10]))["c"]
-            if made >= per_week or today_made:
-                continue
-            try:
+    monday = (date.today() - timedelta(days=date.today().weekday())).isoformat()
+    try:
+        for p in items:
+            if settings.get("seo_auto") == "1" and not p["seo"].get("status"):
                 check_budget()
-                progress(f"Gör video för {p['name']}…")
-                vid = video.make_video(p["id"])
-                if settings.get("video_auto_publish") == "1" and social.connected():
-                    social.publish_video(vid)
-            except BudgetReached as e:
-                db.log(str(e), "warning")
-                break
-            except Exception as e:
-                db.log(f"Videoagenten: {e}", "warning")
+                progress(f"Sökoptimerar {p['name']}…")
+                _try(f"Sökoptimeringen av '{p['name']}'", marketing.auto_seo, p["id"])
+            if p["id"] in texts_due:
+                check_budget()
+                progress(f"Skriver veckans inlägg för {p['name']}…")
+                _try(f"Inläggstexterna för '{p['name']}'", marketing.kit, p["id"])
+            if per_week > 0:
+                made = db.one("SELECT COUNT(*) c FROM videos WHERE product_id = ? AND created_at >= ?", (p["id"], monday))["c"]
+                # sprid videorna över veckan: högst en ny video per produkt och dag
+                today_made = db.one("SELECT COUNT(*) c FROM videos WHERE product_id = ? AND created_at >= ?", (p["id"], db.now()[:10]))["c"]
+                if made < per_week and not today_made:
+                    check_budget()
+                    progress(f"Gör video för {p['name']}…")
+                    vid = _try("Videoagenten", video.make_video, p["id"])
+                    if vid and settings.get("video_auto_publish") == "1" and social.connected():
+                        _try("Publiceringen av videon", social.publish_video, vid)
+    except BudgetReached as e:
+        db.log(str(e), "warning")
+
+
+def _try(what, func, *args):
+    """Ett fel för en produkt ska inte stoppa resten av körningen."""
+    try:
+        return func(*args)
+    except BudgetReached:
+        raise
+    except Exception as e:
+        db.log(f"{what} misslyckades: {e}", "warning")
+        return None
+
+
+def find_products(job_id=None):
+    """Tar fram nya färdiga produktförslag om det finns lediga platser i portföljen."""
+    from . import portfolio
+
+    started = time.time()
+    settings.set("autopilot_last_run", db.now())
     if not aliexpress.configured():
         db.log("Autopiloten: produktsökning är pausad tills AliExpress API är inlagt (videor och försäljningskoll körs ändå).")
-        return "/autopilot"
+        return
     db.execute("UPDATE candidates SET status = 'ny', reason = '' WHERE status = 'behöver_leverantör'")
     need = portfolio.free_slots()
     if need <= 0:
         db.log(f"Autopiloten står på standby: {portfolio.max_active()} produkter är aktiva eller väntar på godkännande.")
-        return "/autopilot"
+        return
     max_per_run = max(1, int(settings.get_float("autopilot_max_candidates", 5)))
     need = min(need, max_per_run)
-    made = 0
+    auto = settings.get("autopilot_auto_approve") == "1"
+    made = published = 0
     try:
         for attempt in range(2):
             waiting = [r["id"] for r in db.query("SELECT id FROM candidates WHERE status = 'ny' ORDER BY id")]
@@ -470,11 +516,25 @@ def run(job_id=None):
                 process(cid, job_id=job_id)
                 if get(cid)["status"] == "redo":
                     made += 1
+                    if auto and _try(f"Automatisk publicering av '{get(cid)['name']}'", approve, cid):
+                        published += 1
             if made >= need:
                 break
     except BudgetReached as e:
         db.log(str(e), "warning")
-    db.log(f"Autopiloten klar på {int(time.time() - started)} s: {made} nya förslag väntar på ditt godkännande.")
+    waiting_txt = (f"{published} publicerade automatiskt, {made - published} väntar på ditt godkännande" if auto
+                   else f"{made} nya förslag väntar på ditt godkännande")
+    db.log(f"Autopiloten klar på {int(time.time() - started)} s: {waiting_txt}.")
+
+
+def run(job_id=None, scout=True):
+    """En körning. Underhållet görs alltid. scout=False hoppar över sökningen efter nya produkter (den görs bara
+    var autopilot_interval_days:e dag av schemaläggaren, men alltid när användaren klickar på knappen)."""
+    settings.set("autopilot_last_upkeep", db.now())
+    upkeep(job_id=job_id)
+    if scout:
+        find_products(job_id=job_id)
+        upkeep(job_id=job_id, sales=False)  # nypublicerade produkter får sökoptimering och texter direkt
     return "/autopilot"
 
 
@@ -522,33 +582,3 @@ def open_as_product(cid):
                                  "trend_json": json.dumps(c["trend"], ensure_ascii=False)})
     _set(cid, product_id=pid, status="manuell", decided_at=db.now())
     return pid
-
-
-# ---------- Schemaläggning ----------
-
-def start_scheduler():
-    from . import jobs
-
-    def loop():
-        while True:
-            time.sleep(60)
-            try:
-                if settings.get("autopilot_enabled") != "1" or not settings.status()["claude"]:
-                    continue
-                hour = int(settings.get_float("autopilot_hour", 7))
-                every = max(1, int(settings.get_float("autopilot_interval_days", 1)))
-                now = datetime.now()
-                if now.strftime("%Y-%m-%d") <= (settings.get("autopilot_burst_until") or "").strip():
-                    every = 1  # tillfällig period med daglig körning
-                last = settings.get("autopilot_last_run")[:10]
-                try:
-                    days_since = (now.date() - datetime.strptime(last, "%Y-%m-%d").date()).days
-                except ValueError:
-                    days_since = every  # aldrig körd
-                if now.hour >= hour and days_since >= every and not jobs.running("autopilot"):
-                    settings.set("autopilot_last_run", db.now())  # markera direkt så att den inte startar två gånger
-                    jobs.start("autopilot", run, result_url=lambda r: r or "/autopilot")
-            except Exception as e:
-                db.log(f"Autopilotens schemaläggare: {e}", "error")
-
-    threading.Thread(target=loop, daemon=True).start()

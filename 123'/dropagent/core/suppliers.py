@@ -4,7 +4,7 @@ import json
 import os
 import re
 
-from . import ai, db, products, settings
+from . import ai, db, products
 
 UPLOAD_DIR = os.path.join(db.DATA_DIR, "uploads")
 MAX_IMAGE_BYTES = 4_800_000

@@ -33,6 +33,7 @@
   <a href="#dsers">4. Installera DSers (skickar ordrar till AliExpress)</a>
   <a href="#gmail">5. Koppla Gmail (kundtjänst)</a>
   <a href="#autopilot">5b. Autopiloten och AliExpress API</a>
+  <a href="#lager">5e. Lagerkoll: slut hos leverantören → bort ur butiken</a>
   <a href="#daily">6. Så använder du DropAgent</a>
   <a href="#cost">7. Vad kostar det?</a>
   <a href="#law">8. Regler du måste känna till</a>
@@ -137,10 +138,11 @@
 <div class="tip">Efter att du godkänt en produkt: koppla den i DSers (<em>Products → Mapping</em>) med länken som visas i historiken. DSers har inget API, så det steget görs för hand (ca 1 minut).</div>
 
 <h2 id="synlighet">5c. Synlighet utan annonser</h2>
-<p>Fliken <strong>Synlighet</strong> har fyra agenter som gör produkterna synliga gratis:</p>
+<p>Fliken <strong>Synlighet</strong> har fem agenter som gör produkterna synliga gratis:</p>
 <ul>
+  <li><strong>Veckans färdiga inlägg:</strong> varje vecka skrivs nya texter för Facebook, Instagram, TikTok och Pinterest till varje produkt. Klicka <em>Kopiera</em> och klistra in, eller <em>Dela på Facebook/Pinterest</em> så öppnas ett färdigt inlägg. Länkarna är märkta, så under <em>Analys</em> i Shopify ser du vilken kanal som ger besök och köp. Stängs av under Inställningar → Sociala medier.</li>
   <li><strong>Kanaler:</strong> visar vilka gratis Shopify-kanaler du har (Google & YouTube, Facebook & Instagram, TikTok) med länk för att installera. <em>Publicera i alla kanaler</em> lägger ut produkten överallt på en gång.</li>
-  <li><strong>Google och AI-sök:</strong> tar reda på vad svenskar söker på och föreslår ny titel, Google-texter, kategori och vanliga frågor. Du godkänner, och sedan uppdateras Shopify.</li>
+  <li><strong>Google och AI-sök:</strong> tar reda på vad svenskar söker på och skriver ny titel, Google-texter, kategori och vanliga frågor. Nya produkter optimeras automatiskt (Inställningar → Sociala medier → <em>Sökoptimera nya produkter automatiskt</em>). Med <em>Optimera igen</em> får du ett förslag som du godkänner.</li>
   <li><strong>Videoagent:</strong> gör 15 sekunders säljvideor av produktbilderna och publicerar dem på Instagram Reels och Facebook (se 5d).</li>
   <li><strong>Lönar sig annonser?</strong> räknar på din vinst och säger ärligt om annonser är för dyra.</li>
 </ul>
@@ -158,6 +160,18 @@
 <p>Ställ sedan in <em>Videor per produkt och vecka</em> och om de ska <em>publiceras automatiskt</em>. Videorna görs när autopilotens dagliga körning är på. Du kan också klicka <em>Skapa video nu</em> på Synlighet-sidan.</p>
 <div class="tip">TikTok och YouTube publicerar bara privat via API tills appen har granskats. Därför kan videorna där bara laddas ner och läggas upp för hand.</div>
 <div class="tip">Videorna byggs av produktbilderna. Bilder med andras loggor eller vattenstämplar bör bytas ut mot leverantörens rena bilder eller egna foton.</div>
+
+<h2 id="lager">5e. Lagerkoll: slut hos leverantören → bort ur butiken</h2>
+<p>DropAgent kollar lagret hos AliExpress för varje produkt i butiken, var sjätte timme, för exakt den variant du säljer. Det kostar inget.</p>
+<ul>
+  <li><strong>Slut hos leverantören</strong> (färre än 3 kvar, eller annonsen är borttagen): produkten döljs i butiken direkt, så att ingen kan köpa något du inte kan leverera.</li>
+  <li><strong>I lager igen:</strong> produkten visas igen av sig själv.</li>
+  <li><strong>Slut i en vecka:</strong> produkten räknas inte längre i portföljen, och autopiloten letar en ersättare.</li>
+  <li>Om AliExpress inte svarar ändras ingenting. Agenten försöker igen vid nästa kontroll.</li>
+  <li>Läget ser du under <strong>Autopilot</strong> i kolumnen <em>Lager hos leverantören</em>. Knappen <em>Kolla lager nu</em> gör en kontroll direkt.</li>
+  <li>Under <strong>Inställningar → Lager</strong> kan du välja att <em>radera</em> produkten ur Shopify i stället för att dölja den (går inte att ångra), ändra gränsen eller stänga av.</li>
+</ul>
+<div class="tip">Lagerkollen och allt annat automatiskt arbetar bara medan DropAgent är igång. Dubbelklicka på <code>autostart.bat</code> en gång, så startar DropAgent av sig själv varje gång du loggar in på datorn.</div>
 
 <h2 id="daily">6. Så använder du DropAgent</h2>
 <div class="box">

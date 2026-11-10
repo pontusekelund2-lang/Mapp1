@@ -3,6 +3,7 @@ import json
 import os
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -154,11 +155,16 @@ def now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+@contextmanager
 def connect():
+    """En anslutning som alltid stängs efteråt (annars blir filen ibland låst på Windows)."""
     os.makedirs(DATA_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 # Kolumner som lagts till i senare versioner (läggs till automatiskt i befintliga databaser)
@@ -168,7 +174,9 @@ MIGRATIONS = {
                  "seo_json": "TEXT DEFAULT '{}'", "content_json": "TEXT DEFAULT '{}'",
                  # för automatiska ordrar: exakt AliExpress-annons, variant och fraktsätt
                  "ae_product_id": "TEXT DEFAULT ''", "ae_sku_attr": "TEXT DEFAULT ''", "ae_sku_label": "TEXT DEFAULT ''",
-                 "ae_shipping_code": "TEXT DEFAULT ''", "ae_unit_price": "REAL DEFAULT 0"},
+                 "ae_shipping_code": "TEXT DEFAULT ''", "ae_unit_price": "REAL DEFAULT 0",
+                 # lageragenten (senaste lagerkoll, dold p.g.a. slut i lager) och produktens publika adress i butiken
+                 "stock_json": "TEXT DEFAULT '{}'", "store_url": "TEXT DEFAULT ''"},
 }
 
 

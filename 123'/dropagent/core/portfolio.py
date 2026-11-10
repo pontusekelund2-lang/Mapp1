@@ -75,7 +75,8 @@ def evaluate():
         state, why = judge(st)
         st.update(state=state, why=why, at=db.now())
         db.update("products", p["id"], {"sales_json": json.dumps(st, ensure_ascii=False)})
-        if state in ("avtagande", "död"):
+        hidden = bool((db.loads(p.get("stock_json"), {}) or {}).get("hidden_at"))  # slut hos leverantören: inget bytesförslag
+        if state in ("avtagande", "död") and not hidden:
             pending = db.one("SELECT id FROM retirements WHERE product_id = ? AND status = 'ny'", (p["id"],))
             snoozed = db.one("SELECT id FROM retirements WHERE product_id = ? AND status = 'behåll' AND decided_at >= ?",
                              (p["id"], (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")))
@@ -118,6 +119,7 @@ def overview():
     prods = []
     for p in active_products():
         p["stats"] = db.loads(p.get("sales_json"), {}) or {}
+        p["stock"] = db.loads(p.get("stock_json"), {}) or {}
         p["listing"] = db.loads(p.get("listing_json"), {}) or {}
         prods.append(p)
     retire = db.query("SELECT r.*, p.name FROM retirements r JOIN products p ON p.id = r.product_id WHERE r.status = 'ny' ORDER BY r.id")
